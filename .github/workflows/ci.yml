@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  dependency-security:
+    name: Dependency security and licence policy / Rust 1.85
+    runs-on: ubuntu-latest
+    steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install Rust 1.85
+        run: rustup toolchain install 1.85 --profile minimal
+      - name: Install pinned dependency-policy tools
+        run: |
+          cargo +1.85 install cargo-deny --version 0.18.3 --locked
+          cargo +1.85 install cargo-audit --version 0.22.1 --locked
+      - name: Check licences and dependency sources
+        # cargo-deny 0.18.3 is the last release that builds on MSRV 1.85.
+        # cargo-audit carries the current RustSec/CVSS parser for advisories.
+        run: cargo +1.85 deny check licenses sources
+      - name: Audit known RustSec advisories
+        run: cargo +1.85 audit
+
+  native-test:
+    name: ${{ matrix.os }} / Rust ${{ matrix.toolchain }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            toolchain: '1.85'
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            toolchain: stable
+            target: x86_64-unknown-linux-gnu
+          - os: macos-13
+            toolchain: stable
+            target: x86_64-apple-darwin
+          - os: macos-14
+            toolchain: stable
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            toolchain: stable
+            target: x86_64-pc-windows-msvc
+    steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install selected Rust toolchain
+        run: rustup toolchain install ${{ matrix.toolchain }} --profile minimal
+      - name: Install Rust quality components
+        run: rustup component add rustfmt clippy --toolchain ${{ matrix.toolchain }}
+      - name: Install release target
+        run: rustup target add ${{ matrix.target }} --toolchain ${{ matrix.toolchain }}
+      - name: Select Rust toolchain
+        run: rustup override set ${{ matrix.toolchain }}
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --all-targets --all-features --locked
+      - if: runner.os != 'Windows'
+        name: Run browser and portable Python checks
+        run: |
+          node --test Tests/UI/test_auth_transport.mjs Tests/UI/test_setup_hints.mjs
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Evals/local-models -p 'test_*.py'
+      - if: runner.os == 'Windows'
+        name: Run browser and portable Python checks
+        shell: pwsh
+        run: |
+          node --test Tests/UI/test_auth_transport.mjs Tests/UI/test_setup_hints.mjs
+          $env:PYTHONDONTWRITEBYTECODE = '1'
+          python -m unittest discover -s Evals/local-models -p 'test_*.py'
+      - run: cargo build --locked --release --target ${{ matrix.target }} --bin agentdeck
+      - if: runner.os != 'Windows'
+        name: Test Unix installers and service definition
+        run: |
+          bash release/tests/install-uninstall.sh
+          bash release/tests/service-unix.sh
+      - if: runner.os == 'Windows'
+        name: Test and parse PowerShell installers and service lifecycle
+        shell: pwsh
+        run: |
+          ./release/tests/install-uninstall.ps1
+          ./release/tests/service.ps1
+      - if: runner.os != 'Windows'
+        name: Package and validate Unix archive layout
+        run: |
+          mkdir -p "$RUNNER_TEMP/agentdeck-release"
+          bash release/package-unix.sh --binary target/${{ matrix.target }}/release/agentdeck --target ${{ matrix.target }} --output-dir "$RUNNER_TEMP/agentdeck-release"
+          bash release/tests/archive-layout.sh "$RUNNER_TEMP/agentdeck-release/agentdeck-${{ matrix.target }}.tar.gz" ${{ matrix.target }}
+      - if: runner.os == 'Windows'
+        name: Package and validate Windows archive layout
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'agentdeck-release'
+          ./release/package-windows.ps1 -Binary target/${{ matrix.target }}/release/agentdeck.exe -Target ${{ matrix.target }} -OutputDir $out
+          ./release/tests/archive-layout.ps1 -Archive (Join-Path $out 'agentdeck-${{ matrix.target }}.zip') -Target ${{ matrix.target }}

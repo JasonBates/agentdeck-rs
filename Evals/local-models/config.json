@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "checkpoint_source": "fixtures/checkpoints.json",
+  "gold_source": "fixtures/gold.json",
+  "profiles": {
+    "D-current-core": {
+      "description": "Current Rust subtitle prompt exercised against synthetic public fixtures."
+    }
+  },
+  "stages": {
+    "smoke10": {
+      "indices": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+      "description": "Ten synthetic public cases. Positions become sanitized smoke10-01 through smoke10-10."
+    },
+    "synthetic10": {
+      "indices": "all",
+      "description": "All ten synthetic public cases; this is a harness check, not a product benchmark."
+    }
+  }
+}

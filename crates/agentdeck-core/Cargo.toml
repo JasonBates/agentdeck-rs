@@ -1,0 +1,27 @@
+[package]
+name = "agentdeck-core"
+version = "0.1.0"
+description = "Deterministic domain types and policy for AgentDeck"
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+# Pinned pure-Rust Unicode-rs implementation of full Default Case Folding plus
+# canonical normalization. Its published metadata has no rust-version, so Rust 1.85.0
+# compilation is the compatibility gate.
+caseless = "=0.2.2"
+regex.workspace = true
+sha2 = "=0.10.9"
+unicode-segmentation = "=1.12.0"
+
+[dev-dependencies]
+jsonschema = { version = "=0.37.4", default-features = false }
+serde_json.workspace = true
+
+[lints]
+workspace = true

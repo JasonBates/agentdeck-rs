@@ -1,0 +1,80 @@
+{
+  "id": "fixture:p19",
+  "result": {
+    "type": "session_snapshot",
+    "snapshot": {
+      "version": "0.8.0",
+      "protocol": 19,
+      "focused_pane_id": "w1:p1",
+      "focused_tab_id": "w1:t1",
+      "focused_workspace_id": "w1",
+      "workspaces": [
+        {
+          "workspace_id": "w1",
+          "number": 1,
+          "label": "Example",
+          "focused": true,
+          "pane_count": 2,
+          "tab_count": 1,
+          "active_tab_id": "w1:t1",
+          "agent_status": "working",
+          "worktree": {
+            "repo_key": "repo:example",
+            "repo_name": "example",
+            "repo_root": "/workspace/example",
+            "checkout_path": "/workspace/example",
+            "is_linked_worktree": false
+          }
+        }
+      ],
+      "tabs": [
+        {
+          "tab_id": "w1:t1",
+          "workspace_id": "w1",
+          "number": 1,
+          "label": "main",
+          "focused": true,
+          "pane_count": 2,
+          "agent_status": "working"
+        }
+      ],
+      "panes": [],
+      "layouts": [],
+      "agents": [
+        {
+          "terminal_id": "term-1",
+          "agent": "claude",
+          "agent_session": {
+            "source": "hook",
+            "agent": "claude",
+            "kind": "id",
+            "value": "session-example-1"
+          },
+          "agent_status": "working",
+          "cwd": "/workspace/example",
+          "focused": true,
+          "pane_id": "w1:p1",
+          "tab_id": "w1:t1",
+          "workspace_id": "w1",
+          "terminal_title_stripped": "Example task",
+          "state_change_seq": 8,
+          "revision": 12,
+          "unknown_future_field": "ignored"
+        },
+        {
+          "terminal_id": "term-2",
+          "agent": "future-agent",
+          "agent_session": null,
+          "agent_status": "unknown",
+          "cwd": null,
+          "focused": false,
+          "pane_id": "w1:p2",
+          "tab_id": "w1:t1",
+          "workspace_id": "w1",
+          "revision": 1
+        }
+      ],
+      "unknown_snapshot_field": true
+    }
+  }
+}

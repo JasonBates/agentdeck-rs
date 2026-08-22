@@ -1,0 +1,8 @@
+You are labelling a coding agent's terminal for a status dashboard.
+Reply with ONE clause, max 8 words, describing what the agent is doing right now.
+No punctuation at the end. No quotes. Present participle.
+
+TERMINAL:
+Run heading fixture tests
+
+LABEL:

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recommended setup · AgentDeck</title>
+<style>
+  :root { color-scheme: dark; --bg:#0a0b0d; --card:#15171c; --line:#24272f; --text:#e9ecf1; --muted:#9aa3b1; --link:#aabbd0; }
+  body { max-width: 720px; margin: 0 auto; padding: 32px 20px 48px; background:var(--bg); color:var(--text); font:16px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif; }
+  h1 { margin:0 0 8px; font-size:28px; } h2 { margin-top:30px; font-size:20px; }
+  p, li { color:var(--muted); } code { padding:2px 5px; border:1px solid var(--line); border-radius:4px; background:var(--card); color:var(--text); }
+  .note { padding:12px 14px; border-left:3px solid #778ba4; background:var(--card); color:var(--muted); }
+  a { color:var(--link); }
+</style>
+</head>
+<body>
+<h1>Recommended setup</h1>
+<p>AgentDeck works with Herdr alone, but local-model enrichment is the recommended experience: it turns raw sessions into stable titles, current-step subtitles, and useful outcome summaries.</p>
+<div class="note">The compact <strong>Recommended setup</strong> row is guidance, not an automatic setup wizard. It appears only when a useful configured provider is missing or incomplete. Disabled and unsupported integrations stay quietly hidden, and nothing is installed, pulled, or started for you.</div>
+
+<h2 id="contextual-card-headings">Contextual card headings</h2>
+<p>AgentDeck uses an <strong>explicitly configured local model</strong> through Ollama to turn bounded local session context into concise card headings. It does not download or select a model automatically. Configure a model you have chosen and installed; use Herdr-only fallback when the machine cannot carry one.</p>
+<p><code>gemma4:12b</code> is the development reference model. For smaller machines, <code>qwen3.5:4b</code> is the current lightweight documented example; it is not an allow-list or a universal winner. At evaluation time, Qwen's official Qwen3.8 collection had no 4B release, so third-party distillations should be evaluated separately. The public synthetic harness makes that comparison without reading private transcripts.</p>
+<p>If heading generation is explicitly disabled, AgentDeck keeps deterministic Herdr-derived headings and does not show an install hint.</p>
+<pre><code>[headings]
+backend = "auto" # auto, none, or ollama
+endpoint = "http://127.0.0.1:11434"
+model = "your-installed-model-tag"
+title_model = "inherit"    # inherit, off, or another opaque tag
+subtitle_model = "inherit"
+outcome_model = "inherit"
+activity_model = "off"</code></pre>
+<p><code>auto</code> only checks whether the configured Ollama service and model are already available. It never selects, downloads, or pulls a model. Command-line and environment overrides are available through <code>AGENTDECK_MODEL</code>/<code>--model</code> and <code>AGENTDECK_TITLE_MODEL</code>/<code>--title-model</code>.</p>
+
+<h2 id="claude-and-codex-capacity">Claude and Codex capacity</h2>
+<p>CodexBar capacity and host/local-model telemetry are optional local runtime panels. AgentDeck never manages provider credentials or executes a provider setup command. Capacity first refreshes after one second and then every five minutes; host and local-model readings refresh every five seconds.</p>
+<pre><code>[capacity]
+backend = "auto" # auto, off, or codexbar
+
+[telemetry]
+host = "auto"        # auto, off, basic, or detailed
+local_model = "auto" # auto, on, or off</code></pre>
+<p>Capacity can retain a last-known reading as stale rather than current; unavailable values stay hidden rather than becoming invented zeroes. Portable host telemetry is basic only, and <code>host = "detailed"</code> reports unsupported. Local-model telemetry observes only the primary configured <code>[headings].model</code> (not per-job overrides) through the local <code>/api/ps</code> endpoint.</p>
+
+<h2 id="copilot-local-context">Copilot local context</h2>
+<p>For a validated Herdr Copilot session ID, AgentDeck can best-effort read the local <code>session-state/&lt;id&gt;/events.jsonl</code> file to derive reply age and context usage. It does not read <code>session-store.db</code>, invoke the Copilot CLI, or contact a cloud service. Malformed, unavailable, or unvalidated sessions remain ordinary generic Herdr cards. Copilot transcript-derived generated headings remain disabled.</p>
+<p>Supported local transcript enrichment is enabled by default to provide context usage, unread state, reply age, and generated headings where available. Set <code>[transcripts] enabled = false</code> in the TOML configuration to prevent every transcript-file read and retain Herdr/screen-only cards.</p>
+<p>AgentDeck follows the local configuration location documented by GitHub for <a href="https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference">Copilot CLI configuration directories</a>; an absolute <code>COPILOT_HOME</code> may override the home directory.</p>
+
+<h2 id="tab-title-sync">Tab-title synchronization</h2>
+<p>Tab-title synchronization is opt-in and off by default:</p>
+<pre><code>[tab_titles]
+enabled = true</code></pre>
+<p>On Unix, it only considers a qualifying single-agent default tab and re-reads Herdr immediately before each rename to verify the same tab, agent identity, and label. Herdr does not offer compare-and-set rename, so a manual rename in the final command race cannot be prevented; it is detected and released on the next pass. Windows title sync is unsupported pending native ACL and reparse-point validation.</p>
+
+<div class="note">Setup commands shown in AgentDeck are display-and-copy only. Review them before running anything in your own terminal.</div>
+</body>
+</html>

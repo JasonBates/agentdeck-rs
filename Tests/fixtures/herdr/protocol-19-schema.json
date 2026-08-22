@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Herdr API",
+  "schema_version": 1,
+  "protocol": 19,
+  "schemas": {
+    "success_response": {
+      "$defs": {
+        "SessionSnapshot": {
+          "type": "object",
+          "required": [
+            "version",
+            "protocol",
+            "workspaces",
+            "tabs",
+            "panes",
+            "layouts",
+            "agents"
+          ],
+          "properties": {
+            "version": { "type": "string" },
+            "protocol": { "type": "integer", "minimum": 0, "format": "uint32" },
+            "workspaces": {
+              "type": "array",
+              "items": { "$ref": "#/schemas/success_response/$defs/WorkspaceInfo" }
+            },
+            "tabs": {
+              "type": "array",
+              "items": { "$ref": "#/schemas/success_response/$defs/TabInfo" }
+            },
+            "panes": { "type": "array" },
+            "layouts": { "type": "array" },
+            "agents": {
+              "type": "array",
+              "items": { "$ref": "#/schemas/success_response/$defs/AgentInfo" }
+            },
+            "focused_pane_id": { "type": ["string", "null"] },
+            "focused_tab_id": { "type": ["string", "null"] },
+            "focused_workspace_id": { "type": ["string", "null"] }
+          }
+        },
+        "AgentInfo": {
+          "type": "object",
+          "required": [
+            "terminal_id",
+            "agent_status",
+            "workspace_id",
+            "tab_id",
+            "pane_id",
+            "focused",
+            "revision"
+          ],
+          "properties": {
+            "terminal_id": { "type": "string" },
+            "agent": { "type": ["string", "null"] },
+            "agent_session": {
+              "anyOf": [
+                { "$ref": "#/schemas/success_response/$defs/AgentSessionInfo" },
+                { "type": "null" }
+              ]
+            },
+            "agent_status": { "$ref": "#/schemas/success_response/$defs/AgentStatus" },
+            "cwd": { "type": ["string", "null"] },
+            "focused": { "type": "boolean" },
+            "pane_id": { "type": "string" },
+            "tab_id": { "type": "string" },
+            "workspace_id": { "type": "string" },
+            "terminal_title_stripped": { "type": ["string", "null"] },
+            "state_change_seq": {
+              "type": "integer",
+              "minimum": 0,
+              "format": "uint64",
+              "default": 0
+            },
+            "revision": { "type": "integer", "minimum": 0, "format": "uint64" }
+          }
+        },
+        "AgentSessionInfo": {
+          "type": "object",
+          "required": ["source", "agent", "kind", "value"],
+          "properties": {
+            "source": { "type": "string" },
+            "agent": { "type": "string" },
+            "kind": { "$ref": "#/schemas/success_response/$defs/AgentSessionRefKind" },
+            "value": { "type": "string" }
+          }
+        },
+        "WorkspaceInfo": {
+          "type": "object",
+          "required": [
+            "workspace_id",
+            "number",
+            "label",
+            "focused",
+            "pane_count",
+            "tab_count",
+            "active_tab_id",
+            "agent_status"
+          ],
+          "properties": {
+            "workspace_id": { "type": "string" },
+            "number": { "type": "integer", "minimum": 0, "format": "uint" },
+            "label": { "type": "string" },
+            "focused": { "type": "boolean" },
+            "pane_count": { "type": "integer", "minimum": 0, "format": "uint" },
+            "tab_count": { "type": "integer", "minimum": 0, "format": "uint" },
+            "active_tab_id": { "type": "string" },
+            "agent_status": { "$ref": "#/schemas/success_response/$defs/AgentStatus" },
+            "worktree": {
+              "anyOf": [
+                { "$ref": "#/schemas/success_response/$defs/WorkspaceWorktreeInfo" },
+                { "type": "null" }
+              ]
+            }
+          }
+        },
+        "WorkspaceWorktreeInfo": {
+          "type": "object",
+          "required": [
+            "repo_key",
+            "repo_name",
+            "repo_root",
+            "checkout_path",
+            "is_linked_worktree"
+          ],
+          "properties": {
+            "repo_key": { "type": "string" },
+            "repo_name": { "type": "string" },
+            "repo_root": { "type": "string" },
+            "checkout_path": { "type": "string" },
+            "is_linked_worktree": { "type": "boolean" }
+          }
+        },
+        "TabInfo": {
+          "type": "object",
+          "required": [
+            "tab_id",
+            "workspace_id",
+            "number",
+            "label",
+            "focused",
+            "pane_count",
+            "agent_status"
+          ],
+          "properties": {
+            "tab_id": { "type": "string" },
+            "workspace_id": { "type": "string" },
+            "number": { "type": "integer", "minimum": 0, "format": "uint" },
+            "label": { "type": "string" },
+            "focused": { "type": "boolean" },
+            "pane_count": { "type": "integer", "minimum": 0, "format": "uint" },
+            "agent_status": { "$ref": "#/schemas/success_response/$defs/AgentStatus" }
+          }
+        },
+        "AgentStatus": {
+          "type": "string",
+          "enum": ["idle", "working", "blocked", "done", "unknown"]
+        },
+        "AgentSessionRefKind": {
+          "type": "string",
+          "enum": ["id", "path"]
+        }
+      }
+    }
+  }
+}

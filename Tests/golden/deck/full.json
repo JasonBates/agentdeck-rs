@@ -1,0 +1,107 @@
+{
+  "herdr": {
+    "ok": true,
+    "detail": "herdr 0.8.2"
+  },
+  "workspaces": [
+    {
+      "id": "repo-example",
+      "label": "example-project",
+      "newTabWorkspaceId": "workspace-1",
+      "number": 1,
+      "status": "working",
+      "focused": true,
+      "agentCount": 1,
+      "working": 1,
+      "unseenDone": 0,
+      "unread": 0
+    }
+  ],
+  "agents": [
+    {
+      "paneId": "pane-1",
+      "kind": "claude",
+      "status": "working",
+      "focused": true,
+      "title": "Define payload contract",
+      "titleSource": "model",
+      "focus": "Defining stable wire types",
+      "unread": false,
+      "projectId": "repo-example",
+      "project": "example-project",
+      "cwd": "/workspace/example-project",
+      "workspaceId": "workspace-1",
+      "workspaceLabel": "Example",
+      "tabLabel": "Contract work",
+      "phase": {
+        "verb": "Building",
+        "elapsed": "1m 20s",
+        "tokens": "4.2k",
+        "thinking": false
+      },
+      "background": "1 shell",
+      "activity": "Checking JSON compatibility",
+      "context": {
+        "used": 42000,
+        "limit": 180000,
+        "percent": 23,
+        "model": "example-model"
+      }
+    }
+  ],
+  "capacity": {
+    "ok": true,
+    "providers": [
+      {
+        "name": "Example Provider",
+        "percentUsed": 31.5,
+        "label": "31.5% used",
+        "windows": [
+          {
+            "span": "5h",
+            "used": 31.5,
+            "expected": 40.0,
+            "resets": "in 2h"
+          }
+        ]
+      }
+    ]
+  },
+  "host": {
+    "ok": true,
+    "load1": 1.2,
+    "load5": 1.0,
+    "cores": 8,
+    "system": {
+      "cpuUser": 12.5,
+      "cpuSys": 4.0,
+      "cpuBusy": 16.5,
+      "cpuHistory": [10, 12, 17],
+      "ramUsedGB": 8.25,
+      "ramTotalGB": 32.0,
+      "ramPercent": 26,
+      "compressorGB": 0.5,
+      "swapUsedGB": 0.25,
+      "swapTotalGB": 2.0,
+      "swapPercent": 13,
+      "agentProcs": 3,
+      "agentCPU": 22.25,
+      "agentRSSGB": 1.75,
+      "load1": 1.2,
+      "cores": 8
+    }
+  },
+  "localModel": {
+    "name": "EXAMPLE",
+    "status": "busy",
+    "residentGB": 4.5,
+    "context": 4096,
+    "calls": [
+      {
+        "at": 1700000000,
+        "ms": 825,
+        "ok": true
+      }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Reference layout only. Generate an installed definition with ../service.sh. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.agentdeck.agentdeck</string>
+  <key>ProgramArguments</key>
+  <array><string>@BINARY@</string><string>serve</string><string>--config</string><string>@CONFIG@</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>@LOG_DIR@/agentdeck.log</string>
+  <key>StandardErrorPath</key><string>@LOG_DIR@/agentdeck.log</string>
+</dict>
+</plist>

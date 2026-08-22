@@ -1,0 +1,10 @@
+Below is the latest reply from a coding agent to its user.
+Summarise it in at most 3 short sentences: what was done, what happens next,
+and any decision or answer it is waiting on. Lead with whichever matters most.
+Write impersonally — never "you" or "I". Be concrete and specific.
+No quotes. No preamble.
+
+LATEST REPLY:
+The service core is complete. Next, wire the provider adapter.
+
+STATE:

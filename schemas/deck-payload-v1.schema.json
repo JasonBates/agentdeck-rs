@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentdeck.dev/schemas/deck-payload-v1.schema.json",
+  "title": "AgentDeck DeckPayload v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["herdr", "workspaces", "agents", "capacity", "host"],
+  "properties": {
+    "herdr": { "$ref": "#/$defs/feedStatus" },
+    "workspaces": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/deckWorkspace" }
+    },
+    "agents": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/deckAgent" }
+    },
+    "capacity": { "$ref": "#/$defs/capacityFeed" },
+    "host": { "$ref": "#/$defs/hostFeed" },
+    "localModel": { "$ref": "#/$defs/localModelSnapshot" },
+    "capabilities": { "$ref": "#/$defs/deckCapabilities" }
+  },
+  "$defs": {
+    "feedStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "detail": { "type": "string" }
+      }
+    },
+    "deckWorkspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "label", "newTabWorkspaceId", "number", "status", "focused",
+        "agentCount", "working", "unseenDone", "unread"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "newTabWorkspaceId": { "type": "string" },
+        "number": { "type": "integer" },
+        "status": { "type": "string" },
+        "focused": { "type": "boolean" },
+        "agentCount": { "type": "integer" },
+        "working": { "type": "integer" },
+        "unseenDone": { "type": "integer" },
+        "unread": { "type": "integer" }
+      }
+    },
+    "deckAgent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "paneId", "kind", "status", "focused", "title", "titleSource", "unread",
+        "projectId", "project", "cwd", "workspaceId", "workspaceLabel", "tabLabel"
+      ],
+      "properties": {
+        "paneId": { "type": "string" },
+        "kind": { "type": "string" },
+        "status": { "type": "string" },
+        "focused": { "type": "boolean" },
+        "title": { "type": "string" },
+        "titleSource": { "enum": ["model", "herdr"] },
+        "focus": { "type": "string" },
+        "state": { "type": "string" },
+        "unread": { "type": "boolean" },
+        "repliedAgo": { "type": "integer" },
+        "projectId": { "type": "string" },
+        "project": { "type": "string" },
+        "cwd": { "type": "string" },
+        "workspaceId": { "type": "string" },
+        "workspaceLabel": { "type": "string" },
+        "tabLabel": { "type": "string" },
+        "phase": { "$ref": "#/$defs/phase" },
+        "background": { "type": "string" },
+        "activity": { "type": "string" },
+        "context": { "$ref": "#/$defs/contextUsage" }
+      }
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verb", "thinking"],
+      "properties": {
+        "verb": { "type": "string" },
+        "elapsed": { "type": "string" },
+        "tokens": { "type": "string" },
+        "thinking": { "type": "boolean" }
+      }
+    },
+    "contextUsage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "limit", "percent"],
+      "properties": {
+        "used": { "type": "integer" },
+        "limit": { "type": "integer" },
+        "percent": { "type": "integer" },
+        "model": { "type": "string" }
+      }
+    },
+    "capacityFeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "providers"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "reason": { "type": "string" },
+        "providers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capacityProvider" }
+        }
+      }
+    },
+    "capacityProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "label", "windows"],
+      "properties": {
+        "name": { "type": "string" },
+        "percentUsed": { "type": "number" },
+        "label": { "type": "string" },
+        "windows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/capacityWindow" }
+        },
+        "note": { "type": "string" }
+      }
+    },
+    "capacityWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["span", "used"],
+      "properties": {
+        "span": { "type": "string" },
+        "used": { "type": "number" },
+        "expected": { "type": "number" },
+        "resets": { "type": "string" }
+      }
+    },
+    "hostFeed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "load1", "load5", "cores"],
+      "properties": {
+        "ok": { "type": "boolean" },
+        "load1": { "type": "number" },
+        "load5": { "type": "number" },
+        "cores": { "type": "integer" },
+        "system": { "$ref": "#/$defs/systemSnapshot" }
+      }
+    },
+    "systemSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cpuUser", "cpuSys", "cpuBusy", "cpuHistory", "ramUsedGB", "ramTotalGB",
+        "ramPercent", "compressorGB", "swapUsedGB", "swapTotalGB", "swapPercent",
+        "agentProcs", "agentCPU", "agentRSSGB", "load1", "cores"
+      ],
+      "properties": {
+        "cpuUser": { "type": "number" },
+        "cpuSys": { "type": "number" },
+        "cpuBusy": { "type": "number" },
+        "cpuHistory": { "type": "array", "items": { "type": "integer" } },
+        "ramUsedGB": { "type": "number" },
+        "ramTotalGB": { "type": "number" },
+        "ramPercent": { "type": "integer" },
+        "compressorGB": { "type": "number" },
+        "swapUsedGB": { "type": "number" },
+        "swapTotalGB": { "type": "number" },
+        "swapPercent": { "type": "integer" },
+        "agentProcs": { "type": "integer" },
+        "agentCPU": { "type": "number" },
+        "agentRSSGB": { "type": "number" },
+        "load1": { "type": "number" },
+        "cores": { "type": "integer" }
+      }
+    },
+    "localModelSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status", "context", "calls"],
+      "properties": {
+        "name": { "type": "string" },
+        "status": { "enum": ["ready", "busy", "unloaded", "offline"] },
+        "residentGB": { "type": "number" },
+        "context": { "type": "integer" },
+        "calls": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/localModelCall" },
+          "maxItems": 128
+        }
+      }
+    },
+    "deckCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "headings", "capacity", "hostTelemetry", "localModelTelemetry", "tabTitleSync"
+      ],
+      "properties": {
+        "headings": { "$ref": "#/$defs/capabilityStatus" },
+        "capacity": { "$ref": "#/$defs/capabilityStatus" },
+        "hostTelemetry": { "$ref": "#/$defs/capabilityStatus" },
+        "localModelTelemetry": { "$ref": "#/$defs/capabilityStatus" },
+        "tabTitleSync": { "$ref": "#/$defs/capabilityStatus" }
+      }
+    },
+    "capabilityStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state"],
+      "properties": {
+        "state": { "enum": ["available", "missing", "disabled", "unsupported", "error"] },
+        "backend": {
+          "enum": ["herdr", "none", "ollama", "codexbar", "native", "system"]
+        },
+        "level": { "enum": ["basic", "detailed"] },
+        "reason": {
+          "enum": [
+            "provider_missing", "model_missing", "model_unconfigured", "provider_disabled",
+            "provider_failed", "connection_failed", "timeout", "invalid_data", "unsupported",
+            "sampler_failed", "state_write_failed", "not_refreshed"
+          ]
+        },
+        "setupHint": { "$ref": "#/$defs/setupHint" }
+      }
+    },
+    "setupHint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message", "actionLabel", "docsPath"],
+      "properties": {
+        "message": { "type": "string" },
+        "actionLabel": { "type": "string" },
+        "docsPath": { "type": "string" },
+        "command": { "type": "string" }
+      }
+    },
+    "localModelCall": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["at", "ms", "ok"],
+      "properties": {
+        "at": { "type": "integer" },
+        "ms": { "type": "integer" },
+        "ok": { "type": "boolean" }
+      }
+    }
+  }
+}

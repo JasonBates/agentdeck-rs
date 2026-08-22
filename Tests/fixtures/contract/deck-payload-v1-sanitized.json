@@ -1,0 +1,64 @@
+{
+  "agents": [
+    {
+      "cwd": "/workspace/contract-fixture",
+      "focused": false,
+      "kind": "unknown-agent",
+      "paneId": "pane-fixture-1",
+      "project": "contract-fixture",
+      "projectId": "workspace-fixture",
+      "status": "idle",
+      "tabLabel": "Fixture",
+      "title": "Fixture session",
+      "titleSource": "herdr",
+      "unread": false,
+      "workspaceId": "workspace-fixture",
+      "workspaceLabel": "Contract Fixture"
+    }
+  ],
+  "capacity": {
+    "ok": true,
+    "providers": [
+      {
+        "label": "40% used",
+        "name": "Fixture Provider",
+        "percentUsed": 40,
+        "windows": [
+          {
+            "span": "5h",
+            "used": 40
+          }
+        ]
+      }
+    ]
+  },
+  "herdr": {
+    "ok": true
+  },
+  "host": {
+    "cores": 8,
+    "load1": 0,
+    "load5": 0,
+    "ok": true
+  },
+  "localModel": {
+    "calls": [],
+    "context": 4096,
+    "name": "FIXTURE",
+    "status": "offline"
+  },
+  "workspaces": [
+    {
+      "agentCount": 1,
+      "focused": false,
+      "id": "workspace-fixture",
+      "label": "contract-fixture",
+      "newTabWorkspaceId": "workspace-fixture",
+      "number": 1,
+      "status": "idle",
+      "unread": 0,
+      "unseenDone": 0,
+      "working": 0
+    }
+  ]
+}

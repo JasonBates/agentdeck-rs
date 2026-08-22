@@ -1,0 +1,19 @@
+{
+  "herdr": {
+    "ok": false,
+    "detail": "herdr unavailable"
+  },
+  "workspaces": [],
+  "agents": [],
+  "capacity": {
+    "ok": false,
+    "reason": "not available",
+    "providers": []
+  },
+  "host": {
+    "ok": false,
+    "load1": 0.0,
+    "load5": 0.0,
+    "cores": 0
+  }
+}

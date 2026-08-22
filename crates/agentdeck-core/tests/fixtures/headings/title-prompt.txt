@@ -1,0 +1,27 @@
+A user opened a working session with one request, then continued.
+
+FIRST REQUEST:
+Build the portable AgentDeck service
+
+LATER REQUESTS:
+- Build it
+- Add portable providers
+
+Decide which of these two is true:
+(a) The later requests are follow-ups that serve the FIRST request — the session
+is still about the thing it opened with.
+(b) The first request was answered or set aside early, and most later requests
+are about a DIFFERENT problem the session then settled on.
+
+If (a), name the first request's goal. If (b), name that different problem.
+Do not name whatever the most recent single request happens to be.
+
+If there are only one or two later requests, there is not yet enough evidence
+that the session has moved on — name the first request's goal.
+
+Name the subject the user is working on, not the assistant's response to it.
+Never describe replying, greeting, acknowledging, helping or answering.
+
+Answer with only a 3 to 6 word imperative task name. No quotes. No trailing period.
+
+NAME:

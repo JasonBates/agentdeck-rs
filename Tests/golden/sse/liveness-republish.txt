@@ -1,0 +1,2 @@
+data: {"herdr":{"ok":false,"detail":"fixture unavailable"},"workspaces":[],"agents":[],"capacity":{"ok":false,"reason":"fixture unavailable","providers":[]},"host":{"ok":false,"load1":0,"load5":0,"cores":0}}
+

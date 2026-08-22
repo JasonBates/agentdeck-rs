@@ -1,0 +1,13 @@
+# Reference layout only. Generate an installed unit with ../service.sh.
+[Unit]
+Description=AgentDeck browser bridge
+After=default.target
+
+[Service]
+Type=simple
+ExecStart=@BINARY@ serve --config @CONFIG@
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

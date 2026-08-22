@@ -1,0 +1,31 @@
+A working session is moving through a series of requests toward one larger goal.
+Name the single concrete step now underway in service of that goal.
+
+Two examples of the right size and shape:
+
+GOAL: Migrate the photo library to Postgres
+REQUEST: "the thumbnails are all coming out rotated 90 degrees"
+STEP: Fix rotated thumbnails in the importer
+
+GOAL: Tune the espresso grinder settings
+CONTEXT: the agent had just asked for a shot pulled at a finer grind
+REQUEST: "ok pulled it"
+STEP: Read the shot time at the finer grind
+
+Notice the second one: a short answer names no work by itself, so the step comes
+from what the answer sets in motion.
+
+THE LARGER GOAL: Build portable AgentDeck service
+
+WHAT THE AGENT SAID JUST BEFORE THIS REQUEST (context only — do not
+describe the agent's reply itself, only the work it is about):
+The service core is complete. Next, wire the provider adapter.
+
+LATEST REQUEST:
+Add portable providers
+
+One action on one thing, at most 8 words. Never restate the goal. Write
+impersonally, never "you" or "I". Name the subject of the work, not the
+assistant's response to it. No quotes, no trailing period.
+
+STEP:

@@ -1,0 +1,38 @@
+# Cargo-deny policy for the complete portable release graph. Keep the target list
+# aligned with .github/workflows/release.yml so a target-only dependency cannot
+# bypass licence or advisory review.
+[graph]
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "x86_64-pc-windows-msvc",
+]
+all-features = true
+
+[advisories]
+# No vulnerabilities or yanked crates are ignored without a recorded review.
+ignore = []
+
+[licenses]
+# Reviewed against Cargo.lock on 2026-08-22. The project and its current
+# dependency graph require these SPDX identifiers; dual-licensed alternatives
+# deliberately rely on the permissive option in this list.
+allow = [
+    "0BSD",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
+    "ISC",
+    "MIT",
+    "MPL-2.0",
+    "Unicode-3.0",
+]
+confidence-threshold = 0.8
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

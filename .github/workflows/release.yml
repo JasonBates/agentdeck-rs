@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  dependency-security:
+    name: Dependency security and licence policy / Rust 1.85
+    runs-on: ubuntu-latest
+    steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install Rust 1.85
+        run: rustup toolchain install 1.85 --profile minimal
+      - name: Install pinned dependency-policy tools
+        run: |
+          cargo +1.85 install cargo-deny --version 0.18.3 --locked
+          cargo +1.85 install cargo-audit --version 0.22.1 --locked
+      - name: Check licences and dependency sources
+        # cargo-deny 0.18.3 is the last release that builds on MSRV 1.85.
+        # cargo-audit carries the current RustSec/CVSS parser for advisories.
+        run: cargo +1.85 deny check licenses sources
+      - name: Audit known RustSec advisories
+        run: cargo +1.85 audit
+
+  package-unix:
+    name: Package ${{ matrix.target }}
+    needs: dependency-security
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-13
+            target: x86_64-apple-darwin
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+    steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: rustup toolchain install stable --profile minimal
+      - run: rustup component add rustfmt clippy --toolchain stable
+      - run: rustup target add ${{ matrix.target }} --toolchain stable
+      - run: rustup override set stable
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --all-targets --all-features --locked
+      - name: Run browser and portable Python checks
+        run: |
+          node --test Tests/UI/test_auth_transport.mjs Tests/UI/test_setup_hints.mjs
+          PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s Evals/local-models -p 'test_*.py'
+      - run: |
+          bash release/tests/install-uninstall.sh
+          bash release/tests/service-unix.sh
+      - run: cargo build --locked --release --target ${{ matrix.target }} --bin agentdeck
+      - run: |
+          mkdir -p dist
+          bash release/package-unix.sh --binary target/${{ matrix.target }}/release/agentdeck --target ${{ matrix.target }} --output-dir dist
+          bash release/tests/archive-layout.sh dist/agentdeck-${{ matrix.target }}.tar.gz ${{ matrix.target }}
+      # actions/upload-artifact v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: agentdeck-${{ matrix.target }}
+          path: dist/agentdeck-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+
+  package-windows:
+    name: Package x86_64-pc-windows-msvc
+    needs: dependency-security
+    runs-on: windows-latest
+    steps:
+      # actions/checkout v4.2.2
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - run: rustup toolchain install stable --profile minimal
+      - run: rustup component add rustfmt clippy --toolchain stable
+      - run: rustup target add x86_64-pc-windows-msvc --toolchain stable
+      - run: rustup override set stable
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace --all-targets --all-features --locked
+      - name: Run browser and portable Python checks
+        shell: pwsh
+        run: |
+          node --test Tests/UI/test_auth_transport.mjs Tests/UI/test_setup_hints.mjs
+          $env:PYTHONDONTWRITEBYTECODE = '1'
+          python -m unittest discover -s Evals/local-models -p 'test_*.py'
+      - name: Test and parse PowerShell installers and service lifecycle
+        shell: pwsh
+        run: |
+          ./release/tests/install-uninstall.ps1
+          ./release/tests/service.ps1
+      - run: cargo build --locked --release --target x86_64-pc-windows-msvc --bin agentdeck
+      - name: Package and validate archive layout
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          ./release/package-windows.ps1 -Binary target/x86_64-pc-windows-msvc/release/agentdeck.exe -Target x86_64-pc-windows-msvc -OutputDir dist
+          ./release/tests/archive-layout.ps1 -Archive dist/agentdeck-x86_64-pc-windows-msvc.zip -Target x86_64-pc-windows-msvc
+      # actions/upload-artifact v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: agentdeck-x86_64-pc-windows-msvc
+          path: dist/agentdeck-x86_64-pc-windows-msvc.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    needs: [package-unix, package-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    steps:
+      # actions/download-artifact v4.3.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: release
+          merge-multiple: true
+      - name: Write SHA-256 checksums
+        working-directory: release
+        run: sha256sum agentdeck-*.tar.gz agentdeck-*.zip > SHA256SUMS
+      - name: Publish checked release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/agentdeck-*.tar.gz release/agentdeck-*.zip release/SHA256SUMS --generate-notes

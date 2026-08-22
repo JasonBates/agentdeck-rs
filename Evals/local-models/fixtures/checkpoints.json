@@ -1,0 +1,72 @@
+[
+  {
+    "id": "synthetic-01",
+    "title": "Harden record parser",
+    "prev_reply": "The parser accepts complete records and rejects missing delimiters.",
+    "last_prompt": "add a regression for a blank trailing record",
+    "recent": "USER: add a regression for a blank trailing record"
+  },
+  {
+    "id": "synthetic-02",
+    "title": "Improve release validation",
+    "prev_reply": "The archive layout test already rejects duplicate members.",
+    "last_prompt": "also cover symbolic links",
+    "recent": "USER: also cover symbolic links"
+  },
+  {
+    "id": "synthetic-03",
+    "title": "Document local setup",
+    "prev_reply": "The guide explains the loopback listener and optional integrations.",
+    "last_prompt": "clarify that no model is required",
+    "recent": "USER: clarify that no model is required"
+  },
+  {
+    "id": "synthetic-04",
+    "title": "Repair event reconnects",
+    "prev_reply": "Reconnect delay now resets after a valid acknowledgement.",
+    "last_prompt": "test an ordinary disconnect",
+    "recent": "USER: test an ordinary disconnect"
+  },
+  {
+    "id": "synthetic-05",
+    "title": "Review title synchronization",
+    "prev_reply": "A fresh snapshot is checked before each rename attempt.",
+    "last_prompt": "cover a manual rename race",
+    "recent": "USER: cover a manual rename race"
+  },
+  {
+    "id": "synthetic-06",
+    "title": "Draft chapter outline",
+    "prev_reply": "The outline has an opening, three supporting sections, and a conclusion.",
+    "last_prompt": "move the example into section two",
+    "recent": "USER: move the example into section two"
+  },
+  {
+    "id": "synthetic-07",
+    "title": "Revise explanatory example",
+    "prev_reply": "The example currently introduces the contrast too late.",
+    "last_prompt": "make the contrast appear first",
+    "recent": "USER: make the contrast appear first"
+  },
+  {
+    "id": "synthetic-08",
+    "title": "Plan research notes",
+    "prev_reply": "The note groups sources by the question each one answers.",
+    "last_prompt": "add a short methods section",
+    "recent": "USER: add a short methods section"
+  },
+  {
+    "id": "synthetic-09",
+    "title": "Edit chapter transition",
+    "prev_reply": "The transition repeats the preceding conclusion.",
+    "last_prompt": "replace the repeated sentence",
+    "recent": "USER: replace the repeated sentence"
+  },
+  {
+    "id": "synthetic-10",
+    "title": "Prepare review checklist",
+    "prev_reply": "The checklist covers structure, evidence, and accessibility.",
+    "last_prompt": "add the citation check",
+    "recent": "USER: add the citation check"
+  }
+]

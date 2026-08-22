@@ -1,0 +1,2052 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Agentdeck">
+<meta name="theme-color" content="#0a0b0d">
+<title>Agentdeck</title>
+<style>
+  :root {
+    --bg: #0a0b0d;
+    --card: #15171c;
+    --card-hi: #1c1f26;
+    --line: #24272f;
+    --text: #e9ecf1;
+    --muted: #868e9c;
+    --dim: #5a616e;
+    --faint: #474d59;
+    --working: #e0a34a;
+    /* The light that travels the working card's outline. Hotter than the outline
+       it rides on, because a light the same colour as the line it runs along is
+       only a thickening — with all four edges lit there's no longer a plain edge
+       to read it against, the way there was when only the top bar moved. */
+    --sweep: #ffdca8;
+    --idle: #4e8f6d;
+    --dead: #b4544e;
+    /* Background work — a shell or an agent the session started and left running.
+       Its own colour because it is its own axis: amber means *this agent* is busy and
+       goes out the moment it answers you, while background work outlives the turn.
+       Teal so it can sit on an amber card or a green one without claiming either. */
+    --bgwork: #58a6b8;
+    --claude: #d97757;
+    --codex: #9fb4c7;
+    --pi: #b48ead;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+    /* Nine tiles is the worst case: 3 rows must fit between header and status rail.
+       Rows still grow past this when a card needs it. */
+    --row: 176px;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+    overscroll-behavior: none;
+  }
+  body {
+    display: flex; flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  /* Stale: no payload for 12s, so everything derived from one is a snapshot of the past
+     and is faded to say "don't act on this". Two rules about how far that goes.
+
+     The bridge status is never faded. It is the explanation for the fade, and at the old
+     whole-page opacity of .45 the offline banner fell to 2.15:1 against the footer and
+     its dot to 1.68:1 — during an outage the one thing worth reading was the least
+     legible thing on screen. At full strength they are 6.30:1 and 3.95:1.
+
+     The fade sits on the data regions rather than on body, because opacity on an
+     ancestor cannot be undone by a child: any exemption has to come from never dimming
+     that subtree in the first place. .7 keeps card titles at 8.27:1 (they were 3.97:1),
+     which matters because the cards deliberately hold their last-known state instead of
+     blanking — stale information is still worth reading, or there would be no reason to
+     leave it on screen. The clock is local, not payload, so it stays put. */
+  body.stale .pills,
+  body.stale .next-action,
+  body.stale .new-tab-action,
+  body.stale #grid,
+  body.stale .quota,
+  body.stale .sys,
+  body.stale #host { opacity: .7; }
+
+  /* ---- header ---- */
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { font-weight: 650; letter-spacing: .14em; font-size: 12px; color: var(--muted); }
+  .pills {
+    display: flex; gap: 6px; flex: 1; flex-wrap: nowrap;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .pills::-webkit-scrollbar { display: none; }
+  .pill {
+    /* Tappable: filters the grid to one project — it deliberately does not move the
+       desktop's Herdr workspace, see the click handler. Sized past the 44px touch
+       minimum via padding rather than height so the header stays compact. */
+    font-size: 13px; padding: 10px 14px; border-radius: 999px;
+    background: var(--card); border: 1px solid var(--line); color: var(--muted);
+    display: flex; align-items: center; gap: 7px;
+    transition: background .12s ease, transform .12s ease;
+  }
+  .pill:active { background: var(--card-hi); transform: scale(.96); }
+  /* Three independent things, so three independent cues rather than one colour:
+     .sel      — which filter you have chosen here (bright text, solid background)
+     .desktop  — this project contains the Herdr workspace focused on the Mac (ring)
+     .working / .done — whether work is running there, or has finished and not
+                        yet been looked at (the same green the cards use) */
+  .pill.sel { color: var(--text); background: #2a2f39; border-color: #5a6472; }
+  .pill.desktop { box-shadow: 0 0 0 2px rgba(120,140,170,.55); }
+  .pill.working { border-color: var(--working); color: var(--working); }
+  .pill.done { border-color: var(--idle); color: #7fc0a0; }
+  .pill.flash { background: #2a2f39; }
+  .pill .badge {
+    min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px;
+    background: var(--dead); color: #fff;
+    font: 600 10px/17px var(--mono); text-align: center;
+  }
+  .pill .n { font-variant-numeric: tabular-nums; color: var(--dim); }
+  /* Next is a command, not another workspace filter. The squarer silhouette keeps
+     that distinction visible even when every control is using the same muted palette. */
+  .next-action {
+    appearance: none; min-height: 38px; padding: 0 9px; border-radius: 8px;
+    border: 1px solid #657184; background: #20252d; color: var(--text);
+    display: flex; align-items: center; align-self: stretch; gap: 5px; flex: none;
+    font: 650 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+    transition: background .12s ease, transform .12s ease;
+  }
+  .next-action:active:not(:disabled) { background: #303744; transform: scale(.96); }
+  .next-action .next-count {
+    min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px;
+    background: var(--idle); color: #fff;
+    font: 700 10px/17px var(--mono); text-align: center;
+  }
+  .next-action.has-blocked { border-color: #9a514f; background: #2b181b; }
+  .next-action.has-blocked .next-count { background: var(--dead); }
+  .next-action:disabled {
+    border-color: var(--line); background: var(--card); color: var(--dim); opacity: .65;
+  }
+  .new-tab-action {
+    appearance: none; width: 38px; height: 38px; padding: 0; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    display: flex; align-items: center; justify-content: center; flex: none;
+    font: 400 24px/1 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    transition: background .12s ease, border-color .12s ease, transform .12s ease;
+  }
+  .new-tab-action[hidden] { display: none; }
+  .new-tab-action:active:not(:disabled) { background: var(--card-hi); transform: scale(.94); }
+  .new-tab-action.pending, .new-tab-action:disabled { color: var(--dim); }
+  .new-tab-action.success { border-color: var(--idle); color: #7fc0a0; }
+  .new-tab-action.error { border-color: var(--dead); color: var(--dead); }
+  .clock { font: 600 13px/1 var(--mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .live { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); }
+  .live.off { background: var(--dead); }
+
+  /* ---- grid ---- */
+  main {
+    flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 14px 18px 8px;
+    display: grid; gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    /* Fixed generous row height rather than 1fr: stretching rows to fill the panel
+       opens a dead gulf between the title and the meta row inside each card. This
+       leaves modest space below the last row instead, which reads as deliberate.
+       Tune --row to taste once it's on the real panel. */
+    grid-auto-rows: minmax(var(--row), auto);
+    align-content: start;
+  }
+  .card {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--dim);
+    border-radius: 12px;
+    padding: 12px 14px 11px;
+    min-height: 116px;
+    display: flex; flex-direction: column; gap: 8px;
+    transition: background .12s ease, transform .12s ease;
+  }
+  .card:active { background: var(--card-hi); transform: scale(.985); }
+  /* ── card states ───────────────────────────────────────────────────────────
+     Precedence, lowest to highest: unread-finished → blocked → selected.
+     Rules are ordered to match, so the later one wins at equal specificity.
+
+     working   amber outline, same colour as the WORKING label, plus a light that
+               sweeps round all four edges of it
+     unread    finished and not yet looked at — subtle green
+     blocked   waiting on you — subtle red, outranks green
+     focused   the one you're looking at — clears every shade, loudest treatment
+     ────────────────────────────────────────────────────────────────────────── */
+  .card.working {
+    border-color: var(--working);
+    border-left-color: var(--working);
+    background: #241d14;
+    box-shadow: 0 0 0 1px rgba(224,163,74,.30), 0 4px 22px -8px rgba(224,163,74,.40);
+  }
+  /* The sweep runs the whole way round the card, not just along the top: four bands,
+     one per edge, carried as four layers of one element so they can't drift apart.
+     Same gradient and the same 2.1s the top bar always had, and the top band still
+     travels exactly as it did — the other three run clockwise behind it. Laid on the
+     padding box, so it traces just inside the amber border the way the top bar
+     already did, and the card's own rounding clips each band short of the corners. */
+  .card.working::before {
+    content: ''; position: absolute; inset: 0;
+    border-radius: 11px; pointer-events: none;
+    --band: transparent 0%, rgba(224,163,74,0) 26%, var(--working) 42%,
+            var(--sweep) 50%, var(--working) 58%, rgba(224,163,74,0) 74%, transparent 100%;
+    background-image:
+      linear-gradient(90deg, var(--band)),    /* top,    travelling left to right */
+      linear-gradient(180deg, var(--band)),   /* right,  top to bottom */
+      linear-gradient(90deg, var(--band)),    /* bottom, right to left */
+      linear-gradient(180deg, var(--band));   /* left,   bottom to top */
+    background-size: 220% 2px, 2px 220%, 220% 2px, 2px 220%;
+    background-repeat: no-repeat;
+    animation: sweep 2.1s linear infinite;
+    /* Stamped on the card as it is built, from a clock shared by every card, so a
+       card rebuilt mid-lap picks the light up where it left off instead of snapping
+       back to the start. A working card's markup changes every second — the elapsed
+       counter ticks — and each change replaces the element, which starts its
+       animations again from zero. That was always true; it only became visible once
+       the whole outline moved rather than a 2px bar along the top. */
+    animation-delay: var(--sweep-delay, 0s);
+  }
+  /* One band is 220% of its edge, so the position runs past both ends of the range and
+     the light leaves the card entirely rather than parking at a corner — which is what
+     the top bar always did, and why it was dark half the time. Two edges are lit at
+     once: top and right through the first half, bottom and left through the second.
+     The pairs are chosen so the right-hand light reaches the bottom-right corner just
+     as the bottom light leaves it, so the two halves join up into one clockwise lap
+     instead of reading as opposite corners taking turns. */
+  @keyframes sweep {
+    from { background-position: 120% 0, 100% 120%, -120% 100%, 0 -120%; }
+    to   { background-position: -120% 0, 100% -120%, 120% 100%, 0 120%; }
+  }
+  .card.idle    { border-left-color: var(--idle); }
+
+  /* Finished, not yet looked at. Clears the moment the pane is focused — from the
+     desktop or from here, since both are the same Herdr focus event. */
+  .card.unread {
+    background: #13281e;
+    border-color: #3c7a59;
+    border-left-color: var(--idle);
+  }
+  .card.unread::after {
+    content: ''; position: absolute; top: 11px; right: 11px;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--idle); box-shadow: 0 0 0 3px rgba(78,143,109,.20);
+  }
+
+  /* Blocked: the agent is waiting on you. Outranks unread — a blocked agent that has
+     also just finished is still, first and foremost, something you have to answer. */
+  .card.blocked {
+    background: #2b1519;
+    border-color: #8f4a48;
+    border-left-color: var(--dead);
+  }
+  .card.blocked .status { color: var(--dead); }
+  .card.blocked .dot { background: var(--dead); }
+  .card.blocked::after {
+    content: ''; position: absolute; top: 11px; right: 11px;
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--dead); box-shadow: 0 0 0 3px rgba(180,84,78,.22);
+  }
+  /* Selected: a bright ring and nothing else. Deliberately leaves the wash alone —
+     the wash is *what the agent is doing* (working / blocked / finished-unseen) and
+     that stays true while you're looking at it. Selection is a separate axis, so it
+     gets a separate channel: an outline outside the card's own border.
+     The green case disappears by itself, since focusing marks the pane read. */
+  .card.focused {
+    box-shadow: 0 0 0 3px rgba(232,240,255,.85), 0 10px 30px -10px rgba(0,0,0,.9);
+  }
+  .card.focused .title { color: #fff; }
+  /* Selecting a working card used to lay the white ring straight onto the amber edge,
+     which read as white and nothing else: the travelling light is a couple of pixels
+     inside that edge, and it can't be seen against something four times brighter
+     sitting right against it. The ring moves out behind a moat of page colour, so the
+     amber outline and its light have a dark surround of their own. The amber halo that
+     used to sit outside the ring is gone with it — it was there to keep a selected card
+     legible as working, and an outline with a light running round it says that already,
+     louder than a static glow ever did. The ring keeps the 3px every other selected
+     card gets, and dropping the halo pays for the moat, so the card claims no more
+     room than it did before. */
+  .card.working.focused {
+    box-shadow: 0 0 0 3px var(--bg),
+                0 0 0 6px rgba(232,240,255,.85),
+                0 10px 30px -10px rgba(0,0,0,.9);
+  }
+  /* The sweep is live information, not a shade, so selection doesn't dim it. */
+  .card.working.focused::before { opacity: 1; }
+  .card.flash   { background: #2a2f39; }
+  /* Drag to rearrange */
+  .card.lifted {
+    transform: scale(1.03); z-index: 20;
+    box-shadow: 0 0 0 2px rgba(200,215,240,.5), 0 18px 40px -12px rgba(0,0,0,.9);
+    opacity: .96; cursor: grabbing;
+    /* Without this the lifted card sits under the pointer and elementFromPoint only
+       ever returns the card being dragged, so no drop target is ever found. */
+    pointer-events: none;
+  }
+  /* Dropping onto another card trades places with it. */
+  .card.dropzone { outline: 2px dashed #6f7a8c; outline-offset: -4px; }
+  /* An empty slot. The deck is a board you arrange rather than a queue, so a gap you
+     leave stays a gap — and it only draws itself while you're holding a card, because
+     the rest of the time the empty space is the point. */
+  .hole { border: 1px dashed transparent; border-radius: 12px; }
+  body.dragging .hole { border-color: #2f3541; }
+  .hole.dropzone { border-color: #8b96a8; background: #161a20; }
+  /* Stop the panel scrolling under the finger once a drag has started. */
+  body.dragging { cursor: grabbing; touch-action: none; overflow: hidden; }
+  body.dragging main { touch-action: none; }
+  body.dragging .card { transition: none; }
+
+  .row { display: flex; align-items: center; gap: 8px; }
+  .kind {
+    font: 600 10px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase;
+    padding: 3px 6px; border-radius: 5px; background: #0000004d;
+  }
+  .kind.claude { color: var(--claude); }
+  .kind.codex  { color: var(--codex); }
+  .kind.pi     { color: var(--pi); }
+  .ws { font-size: 11px; color: var(--dim); margin-left: auto; white-space: nowrap; }
+  /* The tab half of the address. Dimmer than the workspace: you scan for the project
+     and only then read down to which tab of it, so they aren't equal weight. */
+  .ws .tab { color: var(--faint); }
+  .status { font: 600 10px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  .status.working { color: var(--working); }
+  /* Still running here, whatever the agent's own status says. The card an agent leaves
+     behind when it starts six background shells and hands the prompt back is idle by
+     every signal the deck had, and so it showed nothing at all. */
+  .bgwork {
+    display: inline-flex; align-items: center; gap: 5px; flex: none;
+    font: 600 10px/1 var(--mono); letter-spacing: .05em;
+    color: var(--bgwork); background: rgba(88,166,184,.12);
+    padding: 3px 6px 3px 5px; border-radius: 5px; white-space: nowrap;
+  }
+  /* The dot breathes because the claim is that something is still moving; across the
+     room a static chip is just one more label. Phased off the same shared clock as the
+     working dot, for the same reason — the card is rebuilt whenever any of its text
+     changes, and an animation restarting at full brightness each time reads as a
+     flicker rather than a breath. */
+  .bgwork i {
+    width: 5px; height: 5px; border-radius: 50%; flex: none;
+    background: var(--bgwork);
+    animation: pulse 1.6s ease-in-out infinite;
+    animation-delay: var(--pulse-delay, 0s);
+  }
+
+  .title {
+    font-size: 15px; line-height: 1.3; color: var(--text);
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  /* Subtitle: where the last five turns have got to. Sits directly under the title
+     because together they read as one statement — overall task, then current focus. */
+  .focus {
+    font-size: 13px; line-height: 1.3; color: #9aa3b2; margin-top: -2px;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Live phase from the agent's own status line, and the model-written activity clause. */
+  .phase {
+    display: flex; align-items: baseline; gap: 8px;
+    font: 12px/1.2 var(--mono); color: var(--working);
+  }
+  .phase .verb { font-weight: 600; }
+  .phase .num { color: #a5824a; font-variant-numeric: tabular-nums; }
+  .activity {
+    font-size: 13px; line-height: 1.3; color: var(--muted);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .activity::before { content: '▸ '; color: var(--dim); }
+
+  /* State of play from the latest reply — finished, next, waiting on. The line you
+     read when deciding which agent to go to, so it gets a rule and real contrast. */
+  .state {
+    font-size: 12.5px; line-height: 1.4; color: #b9c0cc;
+    padding-left: 9px; border-left: 2px solid #343a45;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .card.working .state { border-left-color: #6b4f28; }
+
+  /* Context-window gauge. */
+  .ctx { display: flex; align-items: center; gap: 7px; margin-top: 2px; }
+  .ctx .track {
+    display: block; flex: 1; height: 6px; border-radius: 3px;
+    background: #2b3038; overflow: hidden;
+  }
+  /* display:block is load-bearing here — these are spans, and an inline element
+     ignores width and height, so the fill rendered at zero size and every bar
+     looked empty no matter what the percentage was. */
+  .ctx .fill {
+    display: block; height: 100%; min-width: 3px;
+    background: var(--idle); border-radius: 3px;
+    transition: width .3s ease;
+  }
+  .ctx.warn .fill { background: var(--working); }
+  .ctx.hot  .fill { background: var(--dead); }
+  .ctx .pct { font: 10px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums; }
+
+  .meta { margin-top: auto; display: flex; align-items: center; gap: 8px; min-height: 18px; }
+  .proj { font: 11px/1 var(--mono); color: var(--muted); }
+  .ago {
+    font: 11px/1 var(--mono); color: var(--dim); font-variant-numeric: tabular-nums;
+    margin-left: auto; text-align: right; white-space: nowrap;
+  }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); flex: none; }
+  /* Phased off the same shared clock as the sweep, for the same reason: the dot is
+     rebuilt with its card every second, and an opacity pulse restarting from full
+     brightness each time reads as a flicker rather than a breath. */
+  .dot.working {
+    background: var(--working);
+    animation: pulse 1.6s ease-in-out infinite;
+    animation-delay: var(--pulse-delay, 0s);
+  }
+  .dot.idle { background: var(--idle); }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+
+  /* ---- footer ---- */
+  footer {
+    display: flex; align-items: stretch; justify-content: flex-start;
+    padding: 0 18px;
+    border-top: 1px solid var(--line);
+    background: #0d0f12;
+    font: 11px/1 var(--mono); color: var(--dim);
+    /* 1px border + 12px top + 48px three-row grid + 12px bottom. */
+    min-height: 73px; height: 73px; flex: none; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  footer::-webkit-scrollbar { display: none; }
+  footer .warn { color: var(--working); }
+  /* Quota, machine and bridge health are distinct kinds of information. Keeping each
+     in a real group makes the rail scan as three sections instead of seven fragments. */
+  .quota, .sys {
+    display: flex; align-items: center; gap: 18px; flex: none;
+    padding: 12px 18px; border-right: 1px solid var(--line);
+  }
+  /* Every footer component uses the same three visual rows: heading, primary value,
+     secondary value. A provider with only a weekly window simply leaves row three
+     empty; it no longer changes the vertical alignment of the whole rail. */
+  .quota { padding-left: 4px; }
+  /* Runtime failures are prose rather than meters. Give that prose a bounded rail
+     cell of its own so a long adapter reason cannot escape the footer or displace
+     bridge health. The ordinary data-bearing .quota layout remains unchanged. */
+  .quota.footer-message {
+    width: min(280px, 45vw); min-width: 0; flex: 0 1 280px;
+    line-height: 1.25; white-space: normal; overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+  footer .spacer { flex: 1 0 16px; }
+
+  /* Provider quota. Same visual grammar as the per-card context bar, so a meter
+     always means "how much of a budget is gone". */
+  .meter {
+    width: 178px; min-width: 178px; height: 48px;
+    display: grid; grid-template-rows: 13px 8px 10px 7px 10px;
+  }
+  .meter .who-row {
+    display: flex; align-items: center; gap: 7px; margin: 0;
+    min-height: 13px; grid-row: 1;
+  }
+  .meter .who {
+    font: 700 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .meter .who.claude { color: var(--claude); }
+  .meter .who.codex { color: var(--codex); }
+  .meter .bars {
+    display: grid; grid-row: 3 / 6; grid-template-rows: 10px 7px 10px;
+  }
+  .meter .bars .win:nth-child(1) { grid-row: 1; }
+  .meter .bars .win:nth-child(2) { grid-row: 3; }
+  .meter .win { display: flex; align-items: center; gap: 8px; }
+  .meter .span { width: 21px; color: var(--muted); font-size: 10px; }
+  /* The gauge wraps the track so the pace marker can extend past it: the track has to
+     clip the fill, and a tick that only spanned the bar's own height would read as part
+     of the fill rather than as a reference mark. */
+  .meter .gauge { position: relative; flex: 1; display: flex; align-items: center; }
+  .meter .track {
+    flex: 1; height: 6px; border-radius: 3px; background: #2b3038; overflow: hidden;
+  }
+  /* Where usage would be if spent evenly up to the reset. */
+  .meter .pace {
+    position: absolute; top: -4px; bottom: -4px; width: 2px;
+    background: #c8d2e2; border-radius: 1px; opacity: .85;
+    transform: translateX(-1px);
+  }
+  /* The distance between pace and actual — behind is reassuring, ahead is a warning. */
+  .meter .gap {
+    position: absolute; top: 0; bottom: 0; border-radius: 2px; pointer-events: none;
+  }
+  .meter .gap.behind { background: rgba(78,143,109,.28); }
+  .meter .gap.ahead  { background: rgba(224,163,74,.30); }
+  .meter .fill {
+    display: block; height: 100%; min-width: 3px; border-radius: 3px;
+    background: var(--idle); transition: width .4s ease;
+  }
+  .meter .fill.warn { background: var(--working); }
+  .meter .fill.hot { background: var(--dead); }
+  .meter .val { width: 31px; text-align: right; color: #aab1bd; font-size: 10px; }
+  .meter.stale .bars { opacity: .58; }
+  .meter .note {
+    padding: 3px 5px; border: 1px solid #6b4f28; border-radius: 4px;
+    letter-spacing: .06em; text-transform: uppercase; font-weight: 700;
+    color: var(--working); font-size: 8px;
+  }
+  footer .right {
+    min-width: 150px; height: 48px; padding: 0 0 0 18px;
+    display: grid; grid-template-rows: 13px 8px 10px 7px 10px;
+    align-self: center; text-align: right; flex: none;
+  }
+  footer .right .bridge-state { grid-row: 1; }
+  footer .right #host { grid-row: 3; }
+  footer .right #age { grid-row: 5; }
+  footer .right > * { min-width: 0; max-width: 100%; overflow: hidden; }
+  .bridge-state {
+    display: flex; align-items: center; justify-content: flex-end; gap: 7px;
+    font: 700 10px/1 var(--mono); letter-spacing: .09em;
+    text-transform: uppercase; color: #8dc0a5;
+  }
+  .bridge-state span, #host, #age {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .bridge-state.off { color: #d67a73; }
+  .bridge-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--idle);
+    box-shadow: 0 0 0 3px rgba(78,143,109,.14);
+  }
+  .bridge-state.off .bridge-dot {
+    background: var(--dead); box-shadow: 0 0 0 3px rgba(180,84,78,.16);
+  }
+  #host { color: var(--muted); }
+  #age { color: var(--dim); }
+
+  /* Optional integrations are deliberately a separate, short row. They are neither
+     a failure of the bridge nor a capacity warning: the deck is complete without
+     them. Keeping this outside the scrolling telemetry rail also means a useful
+     install suggestion never displaces bridge health on a narrow screen. */
+  .setup-hints {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 7px 18px; border-top: 1px solid var(--line);
+    background: #101217; color: var(--muted); font: 11px/1.3 var(--mono);
+    max-height: 72px; overflow-y: auto; flex: none;
+    scrollbar-width: none;
+  }
+  .setup-hints::-webkit-scrollbar { display: none; }
+  .setup-hints[hidden] { display: none; }
+  .setup-hints-label { color: var(--text); font-weight: 700; letter-spacing: .06em; }
+  .setup-hint {
+    display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%;
+  }
+  .setup-hint-message { min-width: 0; color: var(--muted); overflow-wrap: anywhere; }
+  .setup-hint-action {
+    appearance: none; border: 0; padding: 0; background: transparent;
+    color: #aabbd0; font: 700 10px/1 var(--mono); text-decoration: underline;
+    text-underline-offset: 2px; cursor: pointer;
+  }
+  .setup-hint-action:focus-visible, .setup-reset:focus-visible {
+    outline: 2px solid #8ea3bd; outline-offset: 2px;
+  }
+  .setup-command {
+    max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 2px 4px; border: 1px solid var(--line); border-radius: 3px; color: #aab1bd;
+  }
+  .setup-reset { margin-left: auto; }
+  .setup-copy-status { color: var(--dim); }
+  .feature-errors {
+    display: flex; align-items: center; gap: 6px; flex: none; min-width: 0; max-width: 220px;
+    max-height: 48px; overflow: hidden; overflow-wrap: anywhere;
+    padding: 0 12px; color: #c9a46e; font-size: 10px; line-height: 1.25;
+  }
+  .feature-errors:empty { display: none; }
+
+  /* Machine stats. Same meter grammar as quota and context, so a bar always reads as
+     "how much of a budget is gone". */
+  .sys .block {
+    width: 126px; min-width: 126px; height: 48px;
+    overflow: hidden;
+    display: grid; grid-template-rows: 13px 8px 10px 7px 10px;
+  }
+  .sys .head {
+    font: 700 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase;
+    color: var(--muted); margin: 0; grid-row: 1; min-height: 13px;
+    display: flex; gap: 7px; align-items: center;
+  }
+  .sys .head .n { color: var(--text); letter-spacing: 0; }
+  .sys .row2 { display: flex; align-items: center; gap: 7px; margin: 0; }
+  .sys .row2:nth-child(2) { grid-row: 3; }
+  .sys .row2:nth-child(3) { grid-row: 5; }
+  .sys .lab { width: 26px; color: var(--muted); font-size: 10px; }
+  .sys .track {
+    display: block; flex: 1; height: 6px; border-radius: 3px;
+    background: #2b3038; overflow: hidden;
+  }
+  .sys .fill {
+    display: block; height: 100%; min-width: 3px; border-radius: 3px;
+    background: var(--idle); transition: width .4s ease;
+  }
+  .sys .fill.warn { background: var(--working); }
+  .sys .fill.hot  { background: var(--dead); }
+  .sys .val { width: 34px; text-align: right; color: #aab1bd; font-size: 10px; }
+
+  /* CPU sparkline: one bar per sample, oldest left, newest right.
+     The width is reserved rather than derived from the sample count — otherwise the
+     block grows as history accumulates and reflows the whole footer with it. Bars
+     align left so they sit under the label instead of floating away from it. */
+  .spark {
+    display: flex; align-items: flex-end; justify-content: flex-start;
+    gap: 1px; height: 27px; width: 126px; grid-row: 3 / 6;
+  }
+  .spark i {
+    display: block; width: 2px; min-height: 1px; border-radius: 1px;
+    background: #4a6f8c;
+  }
+  .spark i.warn { background: var(--working); }
+  .spark i.hot  { background: var(--dead); }
+
+  /* Local model uses the same rows. Its width comes from the Mem/Context line rather
+     than an arbitrary graph reservation; the graph ends exactly where that line does. */
+  .sys .block.local-model { width: max-content; min-width: max-content; }
+  .local-model .head { gap: 5px; }
+  .model-dot {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--dim); margin-left: 2px; flex: none;
+  }
+  .model-dot.ready { background: var(--idle); }
+  .model-dot.busy { background: var(--working); animation: pulse 1.2s ease-in-out infinite; }
+  .model-dot.offline { background: var(--dead); }
+  .model-meta {
+    height: 10px; margin: 0; grid-row: 3; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+    color: var(--muted); font-size: 10px; line-height: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .model-meta .sep { display: inline-block; width: 12px; }
+  .model-spark {
+    --model-slots: 33;
+    display: grid; grid-template-columns: repeat(var(--model-slots), minmax(0, 1fr));
+    align-items: end; gap: 1px; width: 100%; height: 10px; grid-row: 5;
+  }
+  .model-spark i {
+    display: block; width: auto; min-height: 1px; border-radius: 1px;
+    background: #4a6f8c; flex: none;
+  }
+  .model-spark i.warn { background: var(--working); }
+  .model-spark i.hot { background: var(--dead); }
+  .model-spark i.quiet { background: transparent; }
+
+  /* The 10.5-inch iPad is 1112 CSS pixels wide in landscape. Keep the quota meters
+     and the two bar-based machine blocks readable, and recover the required width from
+     the history-only CPU and Local graphs. The desktop rail remains unchanged. */
+  @media (min-width: 901px) and (max-width: 1180px) {
+    footer {
+      min-height: 73px; height: 73px;
+      padding-left: 12px; padding-right: 12px;
+    }
+    .quota { gap: 12px; padding: 12px 12px 12px 0; }
+    .sys { gap: 12px; padding: 12px; }
+    footer .spacer { display: block; flex: 1 1 0; min-width: 0; }
+    footer .right { min-width: 144px; padding-left: 12px; }
+
+    .sys .block:first-child { width: 90px; min-width: 90px; }
+    .spark { width: 90px; }
+
+    .model-meta { font-size: 9px; }
+    .model-meta .sep { width: 6px; }
+    .model-spark { --model-slots: 29; }
+  }
+  /* Portrait and split-screen still get a useful rail. The detailed meters scroll
+     under the pinned bridge block, so connection health never disappears off-screen. */
+  @media (max-width: 900px) {
+    footer { padding-right: 0; }
+    footer .spacer { display: none; }
+    footer .right {
+      position: sticky; right: 0; z-index: 3; margin-left: auto; padding-right: 18px;
+      background: #0d0f12; box-shadow: -16px 0 18px #0d0f12;
+    }
+    .setup-hints { padding-left: 12px; padding-right: 12px; gap: 7px; }
+    .setup-hint { flex: 1 1 240px; flex-wrap: wrap; }
+    .setup-reset { margin-left: 0; }
+    .feature-errors { max-width: 180px; padding-left: 8px; padding-right: 8px; }
+  }
+  /* iPhone landscape is a control surface, not a miniature monitoring dashboard.
+     Keep four agents visible and tappable at once, preserve quota + bridge health,
+     and leave the laptop-only machine telemetry to the wider iPad layout. */
+  @media (orientation: landscape) and (max-height: 500px) {
+    header {
+      gap: 9px; padding: 4px 10px; min-height: 53px; flex: none;
+    }
+    .brand { font-size: 9px; letter-spacing: .11em; }
+    .pills { gap: 5px; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .pills::-webkit-scrollbar { display: none; }
+    .pill, .next-action, .new-tab-action {
+      min-height: 44px; padding: 0 11px; flex: none;
+      font-size: 11px; gap: 5px;
+    }
+    .next-action { align-self: center; height: 44px; border-radius: 7px; font-size: 9px; }
+    .new-tab-action { width: 44px; height: 44px; padding: 0; font-size: 24px; }
+    .clock { font-size: 11px; }
+
+    main {
+      --row: 164px;
+      padding: 8px 10px; gap: 8px;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      grid-auto-rows: minmax(var(--row), auto);
+    }
+    .card {
+      min-height: 0; padding: 8px 9px 7px; border-radius: 9px; gap: 5px;
+    }
+    .card.working::before { border-radius: 8px; }
+    .row { gap: 5px; }
+    .dot { width: 6px; height: 6px; }
+    .kind, .status, .bgwork { font-size: 8px; }
+    .kind { padding: 3px 5px; }
+    .bgwork { gap: 4px; padding: 3px 5px 3px 4px; }
+    .bgwork i { width: 4px; height: 4px; }
+    .ws { font-size: 9px; }
+    .title { font-size: 13px; line-height: 1.25; -webkit-line-clamp: 2; }
+    .focus { font-size: 10px; line-height: 1.2; -webkit-line-clamp: 1; }
+    .phase { gap: 5px; font-size: 10px; }
+    .activity { display: none; }
+    .state {
+      font-size: 10px; line-height: 1.25; padding-left: 6px;
+      -webkit-line-clamp: 2;
+    }
+    .card:not(.blocked) .state { display: none; }
+    .ctx { gap: 5px; margin-top: 0; }
+    .ctx .track { height: 4px; }
+    .ctx .pct { font-size: 8px; }
+    .meta { gap: 5px; min-height: 12px; }
+    .proj, .ago { font-size: 9px; }
+
+    footer { min-height: 64px; height: 64px; padding: 0 10px; }
+    .quota { gap: 12px; padding: 7px 12px 7px 0; }
+    .quota.footer-message { width: min(210px, 45vw); flex-basis: 210px; }
+    .meter { width: 118px; min-width: 118px; }
+    .meter .who-row { gap: 5px; margin: 0; min-height: 10px; }
+    .meter .who { font-size: 9px; }
+    .meter .note { padding: 2px 4px; font-size: 7px; }
+    .meter .win { gap: 5px; }
+    .meter .span { width: 17px; font-size: 8px; }
+    .meter .track { height: 4px; }
+    .meter .pace { top: -3px; bottom: -3px; width: 1px; }
+    .meter .val { width: 26px; font-size: 8px; }
+    .sys { display: none; }
+    footer .spacer { display: block; flex: 1; }
+    footer .right {
+      position: static; min-width: 126px; margin-left: auto;
+      padding: 0 0 0 10px; box-shadow: none;
+    }
+    .bridge-state { gap: 6px; font-size: 9px; }
+    #host, #age { font-size: 9px; }
+    .setup-hints { max-height: 46px; padding: 5px 10px; font-size: 9px; }
+    .setup-command { max-width: 150px; }
+    .feature-errors { max-width: 135px; padding: 0 6px; font-size: 8px; }
+  }
+  .empty { grid-column: 1 / -1; color: var(--dim); padding: 40px 0; text-align: center; }
+  .auth-panel {
+    position: fixed; inset: 0; z-index: 100; display: grid; place-items: center;
+    padding: 20px; background: rgba(6,7,9,.88); backdrop-filter: blur(8px);
+  }
+  .auth-panel[hidden] { display: none; }
+  .auth-card { width: min(420px, 100%); padding: 24px; border: 1px solid var(--line);
+    border-radius: 10px; background: var(--panel); box-shadow: 0 18px 70px #000; }
+  .auth-card h2 { margin: 0 0 8px; font-size: 20px; }
+  .auth-card p { margin: 0 0 16px; color: var(--muted); line-height: 1.45; }
+  .auth-card label { display: block; margin-bottom: 6px; color: var(--text); font-weight: 700; }
+  .auth-card input { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px;
+    border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--text);
+    font: 14px var(--mono); }
+  .auth-actions { display: flex; gap: 8px; margin-top: 14px; }
+  .auth-actions button { min-height: 40px; padding: 0 14px; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--card); color: var(--text); font-weight: 700; }
+  .auth-status { min-height: 1.4em; margin-top: 10px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">AGENTDECK</span>
+  <button type="button" class="next-action" id="nextAction" disabled
+          aria-label="No agents need attention"><span>Next</span><span>—</span></button>
+  <div class="pills" id="pills"></div>
+  <span class="live" id="live"></span>
+  <span class="clock" id="clock">--:--</span>
+  <button type="button" class="new-tab-action" id="newTabAction" hidden
+          aria-label="Create a new tab">+</button>
+</header>
+
+<main id="grid"><div class="empty">connecting…</div></main>
+
+<footer>
+  <div class="quota" id="cap"></div>
+  <div class="sys" id="sys"></div>
+  <span class="spacer"></span>
+  <div class="feature-errors" id="featureErrors" role="status" aria-live="polite"></div>
+  <div class="right">
+    <span class="bridge-state" id="bridgeState"><i class="bridge-dot"></i><span>bridge —</span></span>
+    <span id="host">load —</span>
+    <span id="age">—</span>
+  </div>
+</footer>
+<aside class="setup-hints" id="setupHints" hidden aria-label="Recommended setup"></aside>
+<section class="auth-panel" id="authPanel" hidden role="dialog" aria-modal="true"
+         aria-labelledby="authTitle" aria-describedby="authHelp">
+  <form class="auth-card" id="authForm">
+    <h2 id="authTitle">Connect to AgentDeck</h2>
+    <p id="authHelp">This bridge requires its access token. The token stays in this tab's
+      session storage and is never put in a URL.</p>
+    <label for="authTokenInput">Access token</label>
+    <input id="authTokenInput" name="agentdeck-token" type="password"
+           autocomplete="current-password" required>
+    <div class="auth-actions">
+      <button type="submit">Connect</button>
+      <button type="button" id="clearAuthToken">Clear</button>
+    </div>
+    <div class="auth-status" id="authStatus" role="status" aria-live="polite"></div>
+  </form>
+</section>
+
+<script>
+(function () {
+  // Endpoints are resolved relative to wherever the page is mounted. Served on
+  // :9797 that's "/", but behind `tailscale serve --set-path=/deck` it's "/deck/",
+  // and absolute paths would hit whatever else owns "/" on port 443.
+  var BASE = (function () {
+    var p = location.pathname || '/';
+    if (p.charAt(p.length - 1) === '/') return p;
+    if (/\.[a-z]+$/i.test(p)) return p.replace(/[^\/]*$/, '');
+    return p + '/';
+  })();
+
+  var grid = document.getElementById('grid');
+  var pills = document.getElementById('pills');
+  var nextAction = document.getElementById('nextAction');
+  var newTabAction = document.getElementById('newTabAction');
+  var live = document.getElementById('live');
+  var clock = document.getElementById('clock');
+  var cap = document.getElementById('cap');
+  var host = document.getElementById('host');
+  var age = document.getElementById('age');
+  var bridgeState = document.getElementById('bridgeState');
+  var setupHints = document.getElementById('setupHints');
+  var featureErrors = document.getElementById('featureErrors');
+  var authPanel = document.getElementById('authPanel');
+  var authForm = document.getElementById('authForm');
+  var authTokenInput = document.getElementById('authTokenInput');
+  var clearAuthTokenButton = document.getElementById('clearAuthToken');
+  var authStatus = document.getElementById('authStatus');
+  var lastMsg = 0;
+  var selected = 'all';   // which pill is filtering the grid
+  var last = null;        // last payload, so a pill tap can re-render without waiting
+  var newTabWorkspaceId = null;
+  var creatingTab = false;
+
+  var AUTH_STORAGE_KEY = 'agentdeck.authToken.v1';
+  var SSE_BUFFER_LIMIT = 4 * 1024 * 1024;
+  var authToken = '';
+  var activeEventSource = null;
+  var activeStreamAbort = null;
+  var reconnectTimer = null;
+  var reconnectDelay = 1000;
+  try { authToken = sessionStorage.getItem(AUTH_STORAGE_KEY) || ''; } catch (e) {}
+
+  function authHeaders(json) {
+    var headers = json ? { 'Content-Type': 'application/json' } : {};
+    if (authToken) headers.Authorization = 'Bearer ' + authToken;
+    return headers;
+  }
+
+  function clearActiveConnection() {
+    if (activeEventSource) { activeEventSource.close(); activeEventSource = null; }
+    if (activeStreamAbort) { activeStreamAbort.abort(); activeStreamAbort = null; }
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  }
+
+  function showAuthPrompt(message) {
+    authStatus.textContent = message || 'Enter the token configured on this bridge.';
+    authTokenInput.value = '';
+    authPanel.hidden = false;
+    setTimeout(function () { authTokenInput.focus(); }, 0);
+  }
+
+  function hideAuthPrompt() {
+    authTokenInput.value = '';
+    authStatus.textContent = '';
+    authPanel.hidden = true;
+  }
+
+  function clearAuthToken(showPrompt) {
+    authToken = '';
+    try { sessionStorage.removeItem(AUTH_STORAGE_KEY); } catch (e) {}
+    clearActiveConnection();
+    if (showPrompt) showAuthPrompt('The bridge rejected that token. Try another.');
+  }
+
+  function handleUnauthorized() {
+    clearAuthToken(true);
+  }
+
+  function authorizedFetch(path, options) {
+    options = options || {};
+    var supplied = options.headers || {};
+    var headers = authHeaders(false);
+    Object.keys(supplied).forEach(function (name) { headers[name] = supplied[name]; });
+    options.headers = headers;
+    return fetch(BASE + path, options).then(function (response) {
+      if (response.status === 401) handleUnauthorized();
+      return response;
+    });
+  }
+
+  // Accept only the bridge's exact unnamed one-line data frames. The remainder
+  // is bounded so a broken or hostile peer cannot grow browser memory forever.
+  function consumeSseText(remainder, chunk) {
+    var buffer = remainder + chunk;
+    if (buffer.length > SSE_BUFFER_LIMIT) throw new Error('invalid SSE stream');
+    if (buffer.indexOf('\r') !== -1) throw new Error('invalid SSE stream');
+    var messages = [], split;
+    while ((split = buffer.indexOf('\n\n')) !== -1) {
+      var frame = buffer.slice(0, split);
+      buffer = buffer.slice(split + 2);
+      if (frame.indexOf('\r') !== -1 || frame.indexOf('\n') !== -1 ||
+          frame.indexOf('data: ') !== 0 || frame.length === 6) {
+        throw new Error('invalid SSE stream');
+      }
+      var data = frame.slice(6);
+      var decoded = JSON.parse(data);
+      if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)) {
+        throw new Error('invalid SSE stream');
+      }
+      messages.push(data);
+    }
+    return { remainder: buffer, messages: messages };
+  }
+
+  function receivePayload(data) {
+    lastMsg = Date.now();
+    try { render(JSON.parse(data)); } catch (err) { return; }
+    tick();
+  }
+
+  function scheduleAuthenticatedReconnect() {
+    if (!authToken || reconnectTimer) return;
+    var delay = reconnectDelay;
+    reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+    reconnectTimer = setTimeout(function () {
+      reconnectTimer = null;
+      connectAuthenticatedStream();
+    }, delay);
+  }
+
+  function connectAuthenticatedStream() {
+    if (!authToken) return;
+    clearActiveConnection();
+    var controller = new AbortController();
+    activeStreamAbort = controller;
+    authorizedFetch('events', { signal: controller.signal }).then(function (response) {
+      if (response.status === 401) return null;
+      if (!response.ok || !response.body || !response.body.getReader) {
+        throw new Error('stream unavailable');
+      }
+      hideAuthPrompt();
+      var reader = response.body.getReader();
+      var decoder = new TextDecoder('utf-8', { fatal: true });
+      var remainder = '';
+      function pump() {
+        return reader.read().then(function (part) {
+          if (part.done) {
+            remainder += decoder.decode();
+            if (remainder) throw new Error('truncated SSE stream');
+            throw new Error('stream closed');
+          }
+          var parsed = consumeSseText(remainder, decoder.decode(part.value, { stream: true }));
+          remainder = parsed.remainder;
+          parsed.messages.forEach(receivePayload);
+          if (parsed.messages.length) reconnectDelay = 1000;
+          return pump();
+        });
+      }
+      return pump();
+    }).catch(function (error) {
+      if (controller.signal.aborted) return;
+      live.classList.add('off');
+      scheduleAuthenticatedReconnect();
+    });
+  }
+
+  function connectLocalStream() {
+    clearActiveConnection();
+    activeEventSource = new EventSource(BASE + 'events');
+    activeEventSource.onmessage = function (event) { receivePayload(event.data); };
+    activeEventSource.onerror = function () { live.classList.add('off'); };
+    // EventSource cannot reveal a 401. A same-origin snapshot probe decides
+    // whether this is a local no-token bridge or should show the auth affordance.
+    authorizedFetch('api/snapshot').then(function (response) {
+      if (response.status === 401 || !response.ok) return null;
+      return response.text();
+    }).then(function (data) {
+      if (data) receivePayload(data);
+    }).catch(function () {});
+  }
+
+  authForm.addEventListener('submit', function (event) {
+    event.preventDefault();
+    var replacement = authTokenInput.value;
+    authTokenInput.value = '';
+    if (!replacement) return;
+    authToken = replacement;
+    try { sessionStorage.setItem(AUTH_STORAGE_KEY, replacement); } catch (e) {}
+    authStatus.textContent = 'Connecting…';
+    reconnectDelay = 1000;
+    connectAuthenticatedStream();
+  });
+
+  clearAuthTokenButton.addEventListener('click', function () {
+    clearAuthToken(false);
+    showAuthPrompt('Token cleared. Enter a replacement to reconnect.');
+  });
+
+  // Arrangement lives on the device, not the server: it's a property of this view.
+  // A card holds a slot — a numbered cell in the grid — rather than a place in a queue,
+  // so you can leave deliberate gaps between cards and nothing slides over to close
+  // one. Slots are counted along the flow, not stored as row/column, so an arrangement
+  // survives the iPad turning and the column count changing under it.
+  var slots = {};
+  try { slots = JSON.parse(localStorage.getItem('agentdeck.slots') || 'null') || {}; }
+  catch (e) {}
+  if (!Object.keys(slots).length) {
+    // Carry over the old dense ordering: the same arrangement, now with room to open
+    // gaps in it. Left in place so the upgrade doesn't shuffle a deck you know.
+    try {
+      JSON.parse(localStorage.getItem('agentdeck.order') || '[]')
+        .forEach(function (id, i) { slots[id] = i; });
+    } catch (e) {}
+  }
+
+  function saveSlots() {
+    try { localStorage.setItem('agentdeck.slots', JSON.stringify(slots)); } catch (e) {}
+  }
+
+  // Drop onto empty space: the card takes that cell and leaves its own behind.
+  function placeInSlot(dragId, slot) {
+    slots[dragId] = slot;
+    saveSlots();
+  }
+
+  // Drop onto another card: they trade cells. Sliding a whole run of cards along to
+  // make room is what the gaps exist to avoid, so nothing else on the board moves.
+  function swapSlots(dragId, targetId) {
+    var a = slots[dragId], b = slots[targetId];
+    if (typeof a !== 'number' || typeof b !== 'number') return;
+    slots[dragId] = b; slots[targetId] = a;
+    saveSlots();
+  }
+
+  // A pane that exits leaves its slot empty rather than pulling the deck tight, so the
+  // board you arranged still looks like itself. The reservation is only released once
+  // the pane has been absent from several healthy payloads, so a Herdr hiccup can't
+  // move cards; releasing it never moves anything either, it just frees the cell.
+  var absences = {}, FORGET_AFTER = 3;
+  function releaseDeadSlots(agents, herdrOK) {
+    if (!herdrOK) return;
+    var live = {};
+    agents.forEach(function (a) { live[a.paneId] = true; });
+    var freed = false;
+    Object.keys(slots).forEach(function (id) {
+      if (live[id]) { delete absences[id]; return; }
+      absences[id] = (absences[id] || 0) + 1;
+      if (absences[id] >= FORGET_AFTER) {
+        delete slots[id]; delete absences[id]; freed = true;
+      }
+    });
+    if (freed) saveSlots();
+  }
+
+  // Sort into slot order, giving a slot to anything that hasn't got one. A new pane
+  // takes the first empty cell rather than landing past the last card, so a tab you
+  // open refills the board instead of stretching it — the deck stays as tall as the
+  // cards need. Slots are numbered along the flow, so scanning up from zero is a
+  // top-row-down, left-to-right scan at whatever width the deck is being read at.
+  function placeAgents(agents) {
+    var ordered = agents.slice().sort(function (a, b) {
+      var x = slots[a.paneId], y = slots[b.paneId];
+      if (typeof x !== 'number') x = Infinity;
+      if (typeof y !== 'number') y = Infinity;
+      return x - y;
+    });
+    // Every cell spoken for, including the ones held for a pane that has gone quiet.
+    // Read before the pass rather than filled during it, so a card moved off a clash
+    // can't be handed a cell a card further down the sort still holds — one race
+    // shouldn't shunt a run of cards along.
+    var claimed = {};
+    Object.keys(slots).forEach(function (id) { claimed[slots[id]] = true; });
+
+    // Two ways to find a cell. A new pane takes the first one with no card in it,
+    // reservation or not: a pane that has just exited already reads as a hole on the
+    // board, and skipping it would fill the gap below a gap. A card being moved off a
+    // clash takes the first cell nobody has any claim on at all, so repairing one
+    // collision can't start another. Both cursors only ever walk forwards, since every
+    // cell they hand out is occupied from that moment on.
+    var taken = {}, vacant = 0, unclaimed = 0, changed = false;
+    ordered.forEach(function (a) {
+      var s = slots[a.paneId];
+      if (typeof s !== 'number') {                 // a pane that has just appeared
+        while (taken[vacant]) vacant++;
+        s = vacant;
+      } else if (taken[s]) {                       // a swap raced a repaint
+        while (taken[unclaimed] || claimed[unclaimed]) unclaimed++;
+        s = unclaimed;
+      } else {
+        taken[s] = true;
+        return;
+      }
+      slots[a.paneId] = s;
+      claimed[s] = true;
+      taken[s] = true;
+      changed = true;
+    });
+    if (changed) saveSlots();
+    // Sorted again on the slots as they finished up: a pane that just dropped into a
+    // gap belongs where the gap was, and the filtered view and Next both read this
+    // order as the order of the deck.
+    return ordered.sort(function (a, b) { return slots[a.paneId] - slots[b.paneId]; });
+  }
+
+  // How many cards the panel fits across right now, read off the resolved grid rather
+  // than guessed from the viewport, so the two breakpoints don't need duplicating here.
+  function columnCount() {
+    var cols = (getComputedStyle(grid).gridTemplateColumns || '').trim();
+    if (!cols || cols === 'none') return 1;
+    return Math.max(1, cols.split(/\s+/).length);
+  }
+
+  // The cells to render: each agent in its own slot, an empty hole everywhere else.
+  // Holes run to the end of the row the last card sits in and no further — a permanent
+  // spare row below the deck would make a screenful of cards scroll for nothing. The
+  // room to drag a card past the end is added while a card is actually lifted instead.
+  // The count always reaches the furthest card, whatever its slot number — a cap here
+  // would silently stop drawing a card that sat beyond it, so the ceiling lives on the
+  // spare row, which is the only place slot numbers can run away.
+  var MAX_CELLS = 240;
+  function cellsFor(agents) {
+    var occupant = {}, lastSlot = 0;
+    agents.forEach(function (a) {
+      occupant[slots[a.paneId]] = a;
+      lastSlot = Math.max(lastSlot, slots[a.paneId]);
+    });
+    var cols = columnCount();
+    var total = (Math.floor(lastSlot / cols) + 1) * cols;
+    var cells = [];
+    for (var i = 0; i < total; i++) cells.push(occupant[i] || null);
+    return cells;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function phaseHTML(p) {
+    if (!p) return '';
+    var bits = ['<span class="verb">' + esc(p.verb) + '</span>'];
+    if (p.elapsed) bits.push('<span class="num">' + esc(p.elapsed) + '</span>');
+    if (p.tokens) bits.push('<span class="num">↓' + esc(p.tokens) + '</span>');
+    if (p.thinking) bits.push('<span class="num">thinking</span>');
+    return '<div class="phase">' + bits.join('') + '</div>';
+  }
+
+  function ctxHTML(c) {
+    if (!c) return '';
+    var cls = c.percent >= 85 ? ' hot' : (c.percent >= 60 ? ' warn' : '');
+    var k = Math.round(c.used / 1000) + 'k/' + Math.round(c.limit / 1000) + 'k';
+    return '<div class="ctx' + cls + '">' +
+             '<span class="track"><span class="fill" style="width:' + c.percent + '%"></span></span>' +
+             '<span class="pct">' + k + ' · ' + c.percent + '%</span>' +
+           '</div>';
+  }
+
+  // Where the pane lives in Herdr, as one address rather than two facts: workspace,
+  // then which tab of it. The tab is absent when it had no label of its own, and when
+  // its label was promoted into the card title — printing it in both places would
+  // just be the old duplication moved somewhere new.
+  function wsHTML(a) {
+    return '<span class="ws">' + esc(a.workspaceLabel) +
+           (a.tabLabel ? '<span class="tab"> : ' + esc(a.tabLabel) + '</span>' : '') +
+           '</span>';
+  }
+
+  // How long since this agent last finished a turn — the staleness reading behind the
+  // green unread badge, which otherwise can't tell you whether the work landed a minute
+  // ago or an hour. Null until the bridge has a reply it can date, and never rounded up
+  // to "just now": the bridge quantises to 30s, so "<1m" is as fine as this line goes.
+  function agoHTML(secs) {
+    if (secs == null) return '';
+    var t = secs < 60 ? '<1m'
+          : secs < 3600 ? Math.floor(secs / 60) + 'm'
+          : secs < 86400 ? Math.floor(secs / 3600) + 'h'
+          : Math.floor(secs / 86400) + 'd';
+    return '<span class="ago">replied ' + t + '</span>';
+  }
+
+  // Only states that genuinely warrant a visit belong behind Next. Context pressure
+  // and long-running work remain visible on their cards, but don't unexpectedly move
+  // the desktop. Within each class, preserve the user's card arrangement.
+  function attentionQueue(agents) {
+    return agents.filter(function (a) {
+      return a.status === 'blocked' || (a.unread && a.status !== 'working');
+    }).sort(function (a, b) {
+      return (a.status === 'blocked' ? 0 : 1) - (b.status === 'blocked' ? 0 : 1);
+    });
+  }
+
+  function renderNext(queue) {
+    if (!queue.length) {
+      nextAction.className = 'next-action';
+      nextAction.disabled = true;
+      nextAction.setAttribute('aria-label', 'No agents need attention');
+      nextAction.innerHTML = '<span>Next</span><span>—</span>';
+      return;
+    }
+    var blocked = queue.some(function (a) { return a.status === 'blocked'; });
+    nextAction.className = 'next-action' + (blocked ? ' has-blocked' : '');
+    nextAction.disabled = false;
+    nextAction.setAttribute('aria-label', 'Focus next agent needing attention; ' +
+                            queue.length + ' total');
+    nextAction.innerHTML = '<span>Next</span><span class="next-count">' +
+                           queue.length + '</span>';
+  }
+
+  function render(d) {
+    last = d;
+    // A live update every few seconds would otherwise rebuild the grid mid-drag and
+    // throw away the card under your finger. Repaint happens when the drag ends.
+    if (lifted) return;
+    // A project can disappear while filtered to it; fall back rather than blank out.
+    if (selected !== 'all' && !(d.workspaces || []).some(function (w) {
+      return w.id === selected;
+    })) selected = 'all';
+    // project pills (parent checkout and linked worktrees share one repo identity)
+    var ws = d.workspaces || [];
+    var totals = ws.reduce(function (t, w) {
+      t.n += w.agentCount; t.working += w.working; t.done += w.unseenDone;
+      t.unread += w.unread; return t;
+    }, { n: 0, working: 0, done: 0, unread: 0 });
+
+    function pill(id, label, w) {
+      var cls = 'pill';
+      if (selected === id) cls += ' sel';
+      if (w.focused) cls += ' desktop';
+      // Running work outranks finished work: amber wins over green. Green tracks the
+      // same thing the cards do — finished and unseen — so a pill stops being green
+      // once you have looked at every finished card behind it.
+      if (w.working) cls += ' working';
+      else if (w.unseenDone) cls += ' done';
+      return '<span class="' + cls + '" data-ws="' + esc(id) + '">' +
+             esc(label) + ' <span class="n">' + w.agentCount + '</span>' +
+             (w.unread ? '<span class="badge">' + w.unread + '</span>' : '') +
+             '</span>';
+    }
+
+    releaseDeadSlots(d.agents || [], d.herdr && d.herdr.ok);
+    var allAgents = placeAgents(d.agents || []);
+    var attention = attentionQueue(allAgents);
+    renderNext(attention);
+    pills.innerHTML = pill('all', 'All', {
+        agentCount: totals.n, working: totals.working,
+        unseenDone: totals.done, unread: totals.unread, focused: false
+      }) +
+      ws.map(function (w) { return pill(w.id, w.label, w); }).join('');
+
+    var selectedWorkspace = ws.find(function (w) { return w.id === selected; });
+    newTabWorkspaceId = selectedWorkspace ? selectedWorkspace.newTabWorkspaceId : null;
+    newTabAction.hidden = selected === 'all';
+    newTabAction.disabled = creatingTab || !newTabWorkspaceId || !(d.herdr && d.herdr.ok);
+    newTabAction.setAttribute('aria-label', selectedWorkspace
+      ? 'Create a new tab in ' + selectedWorkspace.label
+      : 'Create a new tab');
+
+    // agent cards, filtered by the chosen pill and arranged as you left them
+    var agents = allAgents.filter(function (a) {
+      // New payloads group by repository so linked worktrees stay within one project.
+      // workspaceId is the compatibility fallback for an older bridge.
+      return selected === 'all' || (a.projectId || a.workspaceId) === selected;
+    });
+    if (!agents.length) {
+      cardCache = { cells: '', html: {} };
+      grid.innerHTML = '<div class="empty">' +
+        (d.herdr && d.herdr.ok ? 'no agents running' : esc(d.herdr && d.herdr.detail || 'herdr unavailable')) +
+        '</div>';
+    } else if (selected === 'all') {
+      // The whole board, gaps included — the arrangement is of every card at once.
+      patchCards(cellsFor(agents));
+    } else {
+      // Filtered to one project, the other projects' cells aren't yours to look at, so
+      // their holes would just be dead space. Cards pack up in slot order instead, and
+      // a drag still trades two cards' slots, which means the same thing in both views.
+      patchCards(agents);
+    }
+    renderFooter(d);
+  }
+
+  function cardHTML(a) {
+    // Herdr reports five states: idle, working, blocked, done, unknown. The client
+    // only ever handled two of them, so blocked and done rendered as anonymous grey.
+    var st = a.status === 'working' ? 'working'
+           : a.status === 'blocked' ? 'blocked'
+           : (a.status === 'idle' || a.status === 'done') ? 'idle' : '';
+    // Green only means "finished and unseen" — a working agent isn't finished.
+    var unread = a.unread && st !== 'working';
+    return '<div class="card ' + st + (unread ? ' unread' : '') +
+               (a.focused ? ' focused' : '') + '" data-pane="' + esc(a.paneId) + '">' +
+          '<div class="row">' +
+            '<span class="dot ' + st + '"></span>' +
+            '<span class="kind ' + esc(a.kind) + '">' + esc(a.kind) + '</span>' +
+            '<span class="status ' + st + '">' + esc(a.status) + '</span>' +
+            // Sits beside the status rather than replacing it: both are true at once,
+            // and the interesting card is exactly the one that reads "idle · 1 shell".
+            (a.background
+              ? '<span class="bgwork"><i></i>' + esc(a.background) + '</span>' : '') +
+            wsHTML(a) +
+          '</div>' +
+          '<div class="title">' + esc(a.title) + '</div>' +
+          (a.focus ? '<div class="focus">' + esc(a.focus) + '</div>' : '') +
+          phaseHTML(a.phase) +
+          // Activity is a live read of the screen, so it only means anything while the
+          // agent is working; on an idle card it was showing a stale present-tense
+          // description of work that stopped minutes ago. State covers idle properly.
+          // Activity and outcome both describe current work, and a working card already
+          // carries title + subtitle + phase + context + outcome. Showing both overflowed
+          // the tile at nine-up. Activity is the fallback for when there's no outcome yet.
+          (a.activity && st === 'working' && !a.state
+            ? '<div class="activity">' + esc(a.activity) + '</div>' : '') +
+          // Context gauge sits above the outcome: it's a property of the session, read
+          // at a glance, where the outcome is prose you stop to read.
+          ctxHTML(a.context) +
+          (a.state ? '<div class="state">' + esc(a.state) + '</div>' : '') +
+          '<div class="meta">' +
+            // The address above already names the workspace, and you name your
+            // workspaces after the repo, so this is the same word twice on almost every
+            // card. It only earns its place for a worktree, where the workspace is the
+            // worktree and this is the repository it belongs to.
+            (a.project === a.workspaceLabel
+              ? '' : '<span class="proj">' + esc(a.project) + '</span>') +
+            agoHTML(a.repliedAgo) +
+          '</div>' +
+        '</div>';
+  }
+
+  // Replace only the cards whose markup actually changed. Rebuilding the whole grid
+  // on every frame threw away and recreated every node — expensive on an A10X iPad,
+  // and it restarted CSS transitions, which is what made highlights feel late.
+  // Takes the cell list: an agent per occupied slot, null for each empty one. The
+  // signature covers the holes as well as the cards, so opening a gap or turning the
+  // iPad rebuilds the board while a status change still only touches one card.
+  // A card that has just been built starts its animations from zero, so a rebuild lands
+  // as a jump in the light and a flicker in the dot. Offsetting each animation by how
+  // far a clock shared by every card has got puts the new element straight into the lap
+  // the old one was in, and keeps all the working cards in step with each other while
+  // it's at it. The offset is set on the element once it lands rather than written into
+  // cardHTML, since a value that changes every second would make every card's markup
+  // differ every second and rebuild the whole deck for nothing — which is the very
+  // thing this exists to paper over.
+  var SWEEP_MS = 2100, PULSE_MS = 1600;
+  function phaseCard(el) {
+    if (!el) return;
+    // An idle card with background work has no sweep, but it does have a pulsing chip,
+    // so it needs the same clock stamp — otherwise its dot restarts from full
+    // brightness on every rebuild, which is the flicker this exists to prevent.
+    var working = el.classList.contains('working');
+    if (!working && !el.querySelector('.bgwork')) return;
+    var now = Date.now();
+    if (working) el.style.setProperty('--sweep-delay', -(now % SWEEP_MS) / 1000 + 's');
+    el.style.setProperty('--pulse-delay', -(now % PULSE_MS) / 1000 + 's');
+  }
+
+  var cardCache = { cells: '', html: {} };
+  function patchCards(cells) {
+    var signature = cells.map(function (a, i) {
+      return a ? a.paneId : '·' + i;
+    }).join(',');
+    var html = {};
+    cells.forEach(function (a) { if (a) html[a.paneId] = cardHTML(a); });
+
+    if (signature !== cardCache.cells) {
+      grid.innerHTML = cells.map(function (a, i) {
+        return a ? html[a.paneId] : '<div class="hole" data-slot="' + i + '"></div>';
+      }).join('');
+      grid.querySelectorAll('.card').forEach(phaseCard);
+    } else {
+      cells.forEach(function (a) {
+        if (!a || html[a.paneId] === cardCache.html[a.paneId]) return;
+        var el = grid.querySelector('[data-pane="' + a.paneId + '"]');
+        if (!el) return;
+        el.outerHTML = html[a.paneId];
+        // outerHTML swaps the node out, so the replacement has to be looked up again.
+        phaseCard(grid.querySelector('[data-pane="' + a.paneId + '"]'));
+      });
+    }
+    cardCache = { cells: signature, html: html };
+  }
+
+  function bar(label, pct, value) {
+    var cls = pct >= 85 ? ' hot' : (pct >= 70 ? ' warn' : '');
+    return '<span class="row2">' +
+             '<span class="lab">' + esc(label) + '</span>' +
+             '<span class="track"><span class="fill' + cls +
+               '" style="width:' + Math.min(100, pct) + '%"></span></span>' +
+             '<span class="val">' + esc(value) + '</span>' +
+           '</span>';
+  }
+
+  // Five-second time buckets, not a last-N request list. Empty intervals are invisible,
+  // so they do not imply activity, but completed calls continue moving left through
+  // them while Gemma is idle. Multiple calls in one bucket use the slowest latency.
+  function modelSparkHTML(calls, compactRail) {
+    var slots = compactRail ? 29 : 33;
+    var bucketMs = 5000;
+    var nowBucket = Math.floor(Date.now() / bucketMs);
+    var firstBucket = nowBucket - slots + 1;
+    var bins = Array.from({ length: slots }, function () {
+      return { calls: 0, ms: 0, ok: true };
+    });
+
+    (calls || []).forEach(function (call) {
+      if (!call.at) return;
+      var bucket = Math.floor(call.at * 1000 / bucketMs);
+      var index = bucket - firstBucket;
+      if (index < 0 || index >= slots) return;
+      bins[index].calls += 1;
+      bins[index].ms = Math.max(bins[index].ms, call.ms || 0);
+      bins[index].ok = bins[index].ok && call.ok;
+    });
+
+    return bins.map(function (bin, index) {
+      if (!bin.calls) {
+        return '<i class="quiet" style="height:1px"></i>';
+      }
+      // Ten seconds fills the row. Slow successful calls are amber; transport or
+      // response failures are red regardless of latency.
+      var cls = !bin.ok ? 'hot' : (bin.ms >= 6000 ? 'warn' : '');
+      var height = Math.max(2, Math.min(10, Math.round(bin.ms / 10000 * 10)));
+      return '<i class="' + cls + '" style="height:' + height +
+             'px" title="' + bin.calls + ' call' + (bin.calls === 1 ? '' : 's') +
+             ' · ' + (bin.ms / 1000).toFixed(1) + 's"></i>';
+    }).join('');
+  }
+
+  function renderSystem(s, m, showSystem, showModel, errors) {
+    var sys = document.getElementById('sys');
+    if (showSystem === false) s = null;
+    if (showModel === false) m = null;
+    errors = errors || [];
+    if (!s && !m && !errors.length) { sys.innerHTML = ''; return; }
+
+    var compactRail = window.matchMedia &&
+      window.matchMedia('(min-width: 901px) and (max-width: 1180px)').matches;
+
+    var modelHTML = '';
+    if (m) {
+      var modelCalls = modelSparkHTML(m.calls || [], compactRail);
+      var memory = m.residentGB == null ? '—' : m.residentGB.toFixed(1) + 'G';
+      var context = m.context ? Math.round(m.context / 1000) + 'k' : '—';
+      modelHTML =
+        '<div class="block local-model">' +
+          '<div class="head">Local: <span class="n">' + esc(m.name) + '</span>' +
+            '<i class="model-dot ' + esc(m.status) + '" title="' +
+              esc(m.status) + '"></i></div>' +
+          '<div class="model-meta">Mem: ' + memory +
+            '<span class="sep"></span>Context: ' + context + '</div>' +
+          '<div class="model-spark" id="modelSpark">' + modelCalls + '</div>' +
+        '</div>';
+    }
+
+    if (!s) {
+      sys.innerHTML = errors.map(function (error) {
+        return '<div class="block"><div class="head">' + esc(error.label) +
+          '</div><div class="model-meta">unavailable' +
+          (error.reason ? ': ' + esc(error.reason) : '') + '</div></div>';
+      }).join('') + modelHTML;
+      return;
+    }
+
+    // Sparkline. Bars are scaled against 100%, not against the window's own max, so
+    // a quiet five minutes looks quiet rather than being stretched to fill the box.
+    // Cap to what the fixed-width track actually shows: 126px at 3px per bar (a 2px bar
+    // plus its 1px gap) is 42. The sampler keeps 60, so the rail shows the most recent
+    // 3.5 minutes of a 5-minute buffer — asking for 52 just shrank every bar below the
+    // 2px the track is built for.
+    var hist = (s.cpuHistory || []).slice(-(compactRail ? 30 : 42));
+    var spark = hist.map(function (v) {
+      var cls = v >= 85 ? ' hot' : (v >= 70 ? ' warn' : '');
+      return '<i class="' + cls.trim() + '" style="height:' +
+             Math.max(1, Math.round(v / 100 * 26)) + 'px"></i>';
+    }).join('');
+
+    sys.innerHTML =
+      '<div class="block cpu-block">' +
+        '<div class="head">cpu <span class="n">' + Math.round(s.cpuBusy) + '%</span></div>' +
+        '<div class="spark">' + spark + '</div>' +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="head">memory</div>' +
+        bar('ram', s.ramPercent, s.ramUsedGB.toFixed(0) + 'G') +
+        bar('swap', s.swapPercent, s.swapUsedGB.toFixed(1) + 'G') +
+      '</div>' +
+      '<div class="block">' +
+        '<div class="head">agents <span class="n">' + s.agentProcs + '</span></div>' +
+        bar('cpu', Math.min(100, s.agentCPU / s.cores), Math.round(s.agentCPU) + '%') +
+        bar('ram', s.ramTotalGB ? (s.agentRSSGB / s.ramTotalGB * 100) : 0,
+            s.agentRSSGB.toFixed(1) + 'G') +
+      '</div>' +
+      modelHTML + errors.map(function (error) {
+        return '<div class="block"><div class="head">' + esc(error.label) +
+          '</div><div class="model-meta">unavailable' +
+          (error.reason ? ': ' + esc(error.reason) : '') + '</div></div>';
+      }).join('');
+  }
+
+  function restoreBaselineCapacityPanel() {
+    // A capability-aware payload may have hidden this panel. A baseline payload
+    // without capability metadata must restore the data-bearing surface.
+    cap.hidden = false;
+    cap.className = 'quota';
+  }
+
+  function renderFooterBaseline(d) {
+    restoreBaselineCapacityPanel();
+    // footer feeds — each says so when it has nothing
+    if (d.capacity && d.capacity.ok && d.capacity.providers.length) {
+      cap.className = 'quota';
+      cap.innerHTML = d.capacity.providers.map(function (p) {
+        var windows = (p.windows || []).slice();
+        // Claude exposes both windows. Weekly comes first so it occupies the same row
+        // as Codex's only meter; provider comparisons now read straight across.
+        if ((p.name || '').toLowerCase() === 'claude') {
+          windows.sort(function (a, b) {
+            return (a.span === 'wk' ? 0 : 1) - (b.span === 'wk' ? 0 : 1);
+          });
+        }
+        var bars = windows.map(function (w) {
+          var pct = Math.round(w.used);
+          var cls = pct >= 85 ? ' hot' : (pct >= 60 ? ' warn' : '');
+          var mark = '';
+          if (w.expected != null) {
+            var exp = Math.max(0, Math.min(100, w.expected));
+            var lo = Math.min(exp, pct), hi = Math.max(exp, pct);
+            mark = '<span class="gap ' + (pct > exp ? 'ahead' : 'behind') +
+                     '" style="left:' + lo + '%;width:' + (hi - lo) + '%"></span>' +
+                   '<span class="pace" style="left:' + exp + '%" title="expected ' +
+                     Math.round(exp) + '% by reset"></span>';
+          }
+          return '<span class="win">' +
+                   '<span class="span">' + esc(w.span) + '</span>' +
+                   '<span class="gauge">' +
+                     '<span class="track"><span class="fill' + cls +
+                       '" style="width:' + pct + '%"></span></span>' +
+                     mark +
+                   '</span>' +
+                   '<span class="val">' + pct + '%</span>' +
+                 '</span>';
+        }).join('');
+        return '<div class="meter' + (p.note ? ' stale' : '') + '">' +
+                 '<div class="who-row"><span class="who ' + esc(p.name) + '">' +
+                   esc(p.name) + '</span>' +
+                   (p.note ? '<span class="note" title="' + esc(p.note) + '">cached</span>' : '') +
+                 '</div>' +
+                 '<div class="bars">' + (bars || '<span class="win">—</span>') + '</div>' +
+               '</div>';
+      }).join('');
+    } else {
+      cap.className = 'quota footer-message warn';
+      cap.textContent = 'capacity unavailable (' + (d.capacity && d.capacity.reason || '?') + ')';
+    }
+    renderSystem(d.host && d.host.system, d.localModel);
+    host.textContent = d.host && d.host.ok
+      ? 'load ' + d.host.load1.toFixed(1) + ' / ' + d.host.cores + ' cores'
+      : 'load —';
+  }
+
+  var SETUP_DISMISS_PREFIX = 'agentdeck.setupHint.dismissed.v1.';
+
+  function stableCapabilityKey(name, status) {
+    // `backend` is supplied by the bridge specifically to keep dismissals stable if
+    // wording or an adapter's display name changes. The capability name is safe only
+    // as a backwards-compatible fallback when a bridge has not supplied one.
+    return String(status && status.backend || name);
+  }
+
+  function dismissedSetupHint(key) {
+    try { return localStorage.getItem(SETUP_DISMISS_PREFIX + key) === '1'; }
+    catch (e) { return false; }
+  }
+
+  function hasDismissedSetupHints() {
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        if ((localStorage.key(i) || '').indexOf(SETUP_DISMISS_PREFIX) === 0) return true;
+      }
+    } catch (e) {}
+    return false;
+  }
+
+  function resetSetupHints() {
+    try {
+      // Walk backwards because removing an item changes localStorage's indices.
+      for (var i = localStorage.length - 1; i >= 0; i--) {
+        var key = localStorage.key(i) || '';
+        if (key.indexOf(SETUP_DISMISS_PREFIX) === 0) localStorage.removeItem(key);
+      }
+    } catch (e) {}
+  }
+
+  function safeDocsPath(path) {
+    if (typeof path !== 'string' || !path || /^(?:[a-z][a-z0-9+.-]*:|\/\/|\\\\)/i.test(path) ||
+        path.charAt(0) === '/' || path.indexOf('\\') !== -1) return null;
+    try {
+      var decoded = decodeURIComponent(path);
+      if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|\\\\)/i.test(decoded) || decoded.charAt(0) === '/' ||
+          decoded.indexOf('\\') !== -1 || decoded.split(/[/?#]/).some(function (part) {
+        return part === '.' || part === '..';
+      })) return null;
+      var baseURL = new URL(BASE, location.href);
+      var resolved = new URL(path, baseURL);
+      // A docs route must stay mounted beneath AgentDeck's current base path; this
+      // preserves /deck deployments and rejects traversal to a host-owned route.
+      return resolved.origin === baseURL.origin &&
+        resolved.pathname.indexOf(baseURL.pathname) === 0 ? resolved.href : null;
+    } catch (e) { return null; }
+  }
+
+  function capabilityError(label, status) {
+    return { label: label, reason: status && status.reason || '' };
+  }
+
+  function collectSetupHints(capabilities, isDismissed) {
+    var labels = {
+      headings: 'headings', capacity: 'capacity', hostTelemetry: 'host telemetry',
+      localModelTelemetry: 'local model telemetry', tabTitleSync: 'tab title sync'
+    };
+    var hints = [], missing = false;
+    if (!capabilities || typeof capabilities !== 'object') return { hints: hints, missing: missing };
+    Object.keys(labels).forEach(function (name) {
+      var status = capabilities[name];
+      if (!status || status.state !== 'missing') return;
+      missing = true;
+      var hint = status.setupHint;
+      var key = stableCapabilityKey(name, status);
+      if (!hint || typeof hint.message !== 'string' || !hint.message || isDismissed(key)) return;
+      hints.push({ key: key, hint: hint });
+    });
+    return {
+      hints: hints.filter(function (entry, index, all) {
+        return all.findIndex(function (candidate) { return candidate.key === entry.key; }) === index;
+      }).slice(0, 2),
+      missing: missing
+    };
+  }
+
+  function renderSetupHints(capabilities) {
+    if (!capabilities || typeof capabilities !== 'object') {
+      setupHints.hidden = true;
+      setupHints.innerHTML = '';
+      return;
+    }
+    var collected = collectSetupHints(capabilities, dismissedSetupHint);
+    var hints = collected.hints;
+    // Reset remains available if a currently-missing provider was dismissed. An error,
+    // disabled feature, or unsupported platform never creates a Recommended setup row.
+    if (!hints.length && !(collected.missing && hasDismissedSetupHints())) {
+      setupHints.hidden = true;
+      setupHints.innerHTML = '';
+      return;
+    }
+    var html = '<span class="setup-hints-label">Recommended setup</span>';
+    html += hints.map(function (entry) {
+      var hint = entry.hint, docs = safeDocsPath(hint.docsPath);
+      var action = docs ? '<a class="setup-hint-action" href="' + esc(docs) + '">' +
+        esc(hint.actionLabel || 'Learn more') + '</a>' : '';
+      var command = typeof hint.command === 'string' && hint.command
+        ? '<code class="setup-command" title="' + esc(hint.command) + '">' + esc(hint.command) +
+          '</code><button type="button" class="setup-hint-action" data-copy-command="' +
+          esc(hint.command) + '">Copy</button>' : '';
+      return '<span class="setup-hint"><span class="setup-hint-message">' + esc(hint.message) +
+        '</span>' + action + '<button type="button" class="setup-hint-action" data-dismiss-key="' +
+        esc(entry.key) + '">Dismiss</button>' + command + '</span>';
+    }).join('');
+    if (collected.missing && hasDismissedSetupHints()) html += '<button type="button" class="setup-hint-action setup-reset" data-reset-setup-hints>Reset setup hints</button>';
+    html += '<span class="setup-copy-status" id="setupCopyStatus" role="status" aria-live="polite"></span>';
+    setupHints.innerHTML = html;
+    setupHints.hidden = false;
+  }
+
+  function renderFeatureErrors(capabilities) {
+    var errors = [];
+    ['headings', 'tabTitleSync'].forEach(function (name) {
+      var status = capabilities && capabilities[name];
+      if (status && status.state === 'error') errors.push(name === 'headings' ? 'headings' : 'tab title sync');
+    });
+    var next = errors.map(function (label) {
+      var status = label === 'headings' ? capabilities.headings : capabilities.tabTitleSync;
+      return label + ' unavailable' + (status.reason ? ': ' + status.reason : '');
+    }).join(' · ');
+    // Avoid re-announcing an unchanged live-region message on every bridge frame.
+    if (featureErrors.textContent !== next) featureErrors.textContent = next;
+  }
+
+  function renderFooter(d) {
+    // Capability omission is supported by the baseline payload contract: retain the
+    // footer and avoid adding a setup row or hiding an existing feed.
+    if (!d.capabilities || typeof d.capabilities !== 'object') {
+      renderSetupHints(null);
+      featureErrors.textContent = '';
+      renderFooterBaseline(d);
+      return;
+    }
+    var caps = d.capabilities;
+    var capacityStatus = caps.capacity;
+    var hostStatus = caps.hostTelemetry;
+    var localStatus = caps.localModelTelemetry;
+    var capVisible = !capacityStatus || capacityStatus.state === 'available';
+    var detailedHost = !hostStatus || hostStatus.state === 'available';
+    var localVisible = !localStatus || localStatus.state === 'available';
+    var systemErrors = [];
+
+    if (capVisible) {
+      // Reuse the baseline renderer for the data-bearing capacity panel.
+      renderFooterBaseline(d);
+    } else {
+      cap.hidden = true;
+      cap.className = 'quota';
+      cap.innerHTML = '';
+      host.textContent = d.host && d.host.ok
+        ? 'load ' + d.host.load1.toFixed(1) + ' / ' + d.host.cores + ' cores' : 'load —';
+    }
+    if (capVisible) cap.hidden = false;
+    if (capacityStatus && capacityStatus.state === 'error') {
+      cap.hidden = false;
+      cap.className = 'quota footer-message warn';
+      cap.textContent = 'capacity unavailable (' + (capacityStatus.reason || '?') + ')';
+    }
+    if (hostStatus && hostStatus.state === 'error') systemErrors.push(capabilityError('host telemetry', hostStatus));
+    if (localStatus && localStatus.state === 'error') systemErrors.push(capabilityError('local model telemetry', localStatus));
+    // Basic load is independently useful and remains in #host even where detailed
+    // telemetry is unsupported or deliberately disabled.
+    renderSystem(d.host && d.host.system, d.localModel, detailedHost, localVisible, systemErrors);
+    renderSetupHints(caps);
+    renderFeatureErrors(caps);
+  }
+
+  function tick() {
+    var now = new Date();
+    clock.textContent = String(now.getHours()).padStart(2, '0') + ':' +
+                        String(now.getMinutes()).padStart(2, '0');
+    var modelBucket = Math.floor(Date.now() / 5000);
+    if (modelBucket !== tick.modelBucket) {
+      tick.modelBucket = modelBucket;
+      var modelSpark = document.getElementById('modelSpark');
+      if (modelSpark && last && last.localModel) {
+        var compact = window.matchMedia &&
+          window.matchMedia('(min-width: 901px) and (max-width: 1180px)').matches;
+        modelSpark.innerHTML = modelSparkHTML(last.localModel.calls || [], compact);
+      }
+    }
+    if (!lastMsg) {
+      bridgeState.classList.add('off');
+      bridgeState.lastElementChild.textContent = 'bridge —';
+      age.textContent = 'awaiting data';
+      return;
+    }
+    var secs = Math.round((Date.now() - lastMsg) / 1000);
+    var stale = secs > 12;   // bridge republishes every 5s, so 12s means it's gone
+    bridgeState.classList.toggle('off', stale);
+    bridgeState.lastElementChild.textContent = stale ? 'AgentDeck offline' : 'AgentDeck live';
+    age.textContent = secs < 2 ? 'updated now' : 'updated ' + secs + 's ago';
+    document.body.classList.toggle('stale', stale);
+    live.classList.toggle('off', stale);
+  }
+  setInterval(tick, 1000);
+  tick();
+
+  function act(el, path, payload) {
+    el.classList.add('flash');
+    setTimeout(function () { el.classList.remove('flash'); }, 220);
+    authorizedFetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (response) {
+      if (!response.ok && response.status !== 401) throw new Error('action failed');
+    }).catch(function () {});
+  }
+
+  var lastNextPane = null;
+
+  function cardForPane(paneId) {
+    var cards = grid.querySelectorAll('.card');
+    for (var i = 0; i < cards.length; i++) {
+      if (cards[i].getAttribute('data-pane') === paneId) return cards[i];
+    }
+    return null;
+  }
+
+  function jumpToNext() {
+    if (!last) return;
+    var queue = attentionQueue(placeAgents(last.agents || []));
+    if (!queue.length) return;
+
+    // Start after the last jump and skip the already-focused card when another choice
+    // exists. This makes repeated presses cycle rather than sticking on one blocked pane.
+    var previous = queue.findIndex(function (a) { return a.paneId === lastNextPane; });
+    var target = null;
+    for (var step = 1; step <= queue.length; step++) {
+      var candidate = queue[(previous + step) % queue.length];
+      if (queue.length === 1 || !candidate.focused) { target = candidate; break; }
+    }
+    target = target || queue[(previous + 1) % queue.length];
+    lastNextPane = target.paneId;
+
+    selected = 'all';
+    render(last);
+    requestAnimationFrame(function () {
+      var card = cardForPane(target.paneId);
+      if (!card) return;
+      card.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+      act(card, 'api/focus', { paneId: target.paneId });
+    });
+  }
+
+  // Tap a card → focus that agent. Herdr switches workspace on its own when the
+  // target pane lives in another one, so this doubles as a cross-space jump.
+  grid.addEventListener('click', function (e) {
+    if (suppressClick) { suppressClick = false; return; }   // that tap was a drag
+    var card = e.target.closest ? e.target.closest('.card') : null;
+    if (card) act(card, 'api/focus', { paneId: card.getAttribute('data-pane') });
+  });
+
+  // ---- drag to rearrange -------------------------------------------------
+  // Pointer events, not HTML5 drag-and-drop: dragstart never fires for touch on iOS.
+  // Long-press to pick up, which is the platform's own reorder gesture and leaves
+  // both vertical scrolling and tap-to-focus alone.
+  var HOLD_MS = 300, SLOP = 10;
+  var press = null, lifted = null, dropTarget = null, suppressClick = false;
+
+  // A drop target is either another card (trade places) or an empty slot (move there).
+  function cellAt(x, y) {
+    var el = document.elementFromPoint(x, y);
+    var c = el && el.closest ? el.closest('.card, .hole') : null;
+    return c && c !== lifted ? c : null;
+  }
+
+  function endPress() {
+    if (press && press.timer) clearTimeout(press.timer);
+    press = null;
+  }
+
+  // Spare slots below the deck, present only for the length of a drag, so a card can be
+  // moved past the last one. Live repaints are suspended while a card is lifted, so
+  // appending to the grid here can't collide with a render. Only the whole board is a
+  // canvas of slots — in a filtered view the cards are packed and a cell below them
+  // wouldn't stand for any particular slot.
+  var dragRow = [];
+
+  // The empty part of the panel is board you can see, so a drag reaches all of it: on a
+  // panel four rows deep every drag offers rows one to four, whether the cards fill one
+  // row or three. How many rows the panel holds is counted at the deck's own row height
+  // rather than measured off the cards as they happen to be laid out — a card that has
+  // grown past that height would otherwise eat a row off the end, and the board you can
+  // drop onto would change size with the contents of the deck instead of standing still.
+  // Always at least one row past the last card: that is what a deck already filling the
+  // panel gets, and the only way the board can grow downwards at all.
+  function spareRowCount(cols) {
+    var cs = getComputedStyle(grid);
+    var gap = parseFloat(cs.rowGap) || 0;
+    var rowH = parseFloat(cs.getPropertyValue('--row'));
+    if (!(rowH > 0)) return 1;
+    var panel = grid.clientHeight - (parseFloat(cs.paddingTop) || 0) -
+                (parseFloat(cs.paddingBottom) || 0);
+    var fits = Math.floor((panel + gap) / (rowH + gap));   // no trailing gap on the last
+    return Math.max(1, fits - Math.ceil(grid.children.length / cols));
+  }
+
+  function openDragRow() {
+    if (selected !== 'all') return;
+    var slot = grid.children.length;
+    var cols = columnCount(), rows = spareRowCount(cols);
+    for (var r = 0; r < rows; r++) {
+      for (var i = 0; i < cols; i++) {
+        if (slot >= MAX_CELLS) return;   // the deck can't grow downwards for ever
+        var hole = document.createElement('div');
+        hole.className = 'hole';
+        hole.setAttribute('data-slot', String(slot));
+        grid.appendChild(hole);
+        dragRow.push(hole);
+        slot++;
+      }
+    }
+  }
+
+  function closeDragRow() {
+    dragRow.forEach(function (hole) {
+      if (hole.parentNode) hole.parentNode.removeChild(hole);
+    });
+    dragRow = [];
+  }
+
+  grid.addEventListener('pointerdown', function (e) {
+    var card = e.target.closest ? e.target.closest('.card') : null;
+    if (!card) return;
+    press = {
+      card: card, x: e.clientX, y: e.clientY,
+      timer: setTimeout(function () {
+        lifted = card;
+        card.classList.add('lifted');
+        document.body.classList.add('dragging');
+        openDragRow();
+        if (navigator.vibrate) navigator.vibrate(8);
+      }, HOLD_MS)
+    };
+  });
+
+  grid.addEventListener('pointermove', function (e) {
+    // Movement before the hold completes is a scroll, not a drag.
+    if (press && !lifted) {
+      if (Math.abs(e.clientX - press.x) > SLOP || Math.abs(e.clientY - press.y) > SLOP) {
+        endPress();
+      }
+      return;
+    }
+    if (!lifted) return;
+    e.preventDefault();
+    lifted.style.transform =
+      'translate(' + (e.clientX - press.x) + 'px,' + (e.clientY - press.y) + 'px) scale(1.03)';
+    var over = cellAt(e.clientX, e.clientY);
+    if (over !== dropTarget) {
+      if (dropTarget) dropTarget.classList.remove('dropzone');
+      dropTarget = over;
+      if (dropTarget) dropTarget.classList.add('dropzone');
+    }
+  });
+
+  function finishDrag() {
+    if (lifted) {
+      if (dropTarget) {
+        var dragId = lifted.getAttribute('data-pane');
+        if (dropTarget.classList.contains('hole')) {
+          placeInSlot(dragId, Number(dropTarget.getAttribute('data-slot')));
+        } else {
+          swapSlots(dragId, dropTarget.getAttribute('data-pane'));
+        }
+      }
+      lifted.classList.remove('lifted');
+      lifted.style.transform = '';
+      suppressClick = true;       // don't focus the agent we just dropped
+    }
+    if (dropTarget) dropTarget.classList.remove('dropzone');
+    document.body.classList.remove('dragging');
+    lifted = null; dropTarget = null;
+    closeDragRow();
+    endPress();
+    if (last) render(last);
+  }
+
+  grid.addEventListener('pointerup', finishDrag);
+  grid.addEventListener('pointercancel', finishDrag);
+
+  // Tap a workspace pill → filter this view. It deliberately no longer switches the
+  // Herdr workspace: the pills now show which space the desktop is on (the ring), and
+  // a filter that also moved the Mac's focus would fight that signal.
+  pills.addEventListener('click', function (e) {
+    var pill = e.target.closest ? e.target.closest('.pill') : null;
+    if (!pill) return;
+    selected = pill.getAttribute('data-ws');
+    if (last) render(last);
+  });
+
+  nextAction.addEventListener('click', jumpToNext);
+
+  setupHints.addEventListener('click', function (e) {
+    var target = e.target;
+    if (!target || !target.getAttribute) return;
+    var dismissKey = target.getAttribute('data-dismiss-key');
+    if (dismissKey) {
+      try { localStorage.setItem(SETUP_DISMISS_PREFIX + dismissKey, '1'); } catch (err) {}
+      if (last) render(last);
+      return;
+    }
+    if (target.hasAttribute('data-reset-setup-hints')) {
+      resetSetupHints();
+      if (last) render(last);
+      return;
+    }
+    var command = target.getAttribute('data-copy-command');
+    if (command == null) return;
+    var status = document.getElementById('setupCopyStatus');
+    if (!navigator.clipboard || !navigator.clipboard.writeText) {
+      if (status) status.textContent = 'Copy unavailable — select the command.';
+      return;
+    }
+    navigator.clipboard.writeText(command).then(function () {
+      if (status) status.textContent = 'Copied.';
+    }).catch(function () {
+      if (status) status.textContent = 'Could not copy — select the command.';
+    });
+  });
+
+  newTabAction.addEventListener('click', function () {
+    if (!newTabWorkspaceId || creatingTab) return;
+    var targetWorkspaceId = newTabWorkspaceId;
+    creatingTab = true;
+    newTabAction.disabled = true;
+    newTabAction.className = 'new-tab-action pending';
+    newTabAction.textContent = '…';
+
+    authorizedFetch('api/tab', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspaceId: targetWorkspaceId })
+    }).then(function (response) {
+      if (!response.ok) throw new Error('tab creation failed');
+      newTabAction.className = 'new-tab-action success';
+      newTabAction.textContent = '✓';
+      setTimeout(resetNewTabAction, 900);
+    }).catch(function () {
+      newTabAction.className = 'new-tab-action error';
+      newTabAction.textContent = '!';
+      setTimeout(resetNewTabAction, 1400);
+    });
+  });
+
+  function resetNewTabAction() {
+    creatingTab = false;
+    newTabAction.className = 'new-tab-action';
+    newTabAction.textContent = '+';
+    if (last) render(last);
+  }
+
+  // Turning the iPad changes how many cards fit across, which changes where the empty
+  // slots fall. Waiting for the next payload left a rotated deck holding stale holes
+  // for a few seconds, so repaint as soon as the layout settles.
+  var reflow = null;
+  window.addEventListener('resize', function () {
+    if (reflow) clearTimeout(reflow);
+    reflow = setTimeout(function () { reflow = null; if (last) render(last); }, 120);
+  });
+
+  // Local bridges keep native EventSource reconnection. Authenticated bridges
+  // use fetch streaming because EventSource cannot attach a Bearer header.
+  if (authToken) connectAuthenticatedStream();
+  else connectLocalStream();
+})();
+</script>
+</body>
+</html>
