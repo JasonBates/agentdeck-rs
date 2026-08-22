@@ -1340,9 +1340,11 @@ mod tests {
 
     #[test]
     fn timestamp_supports_pre_epoch_values_without_panicking() {
-        let timestamp = timestamp_from_system_time(UNIX_EPOCH - Duration::from_nanos(1));
-        assert!(timestamp.unix_seconds <= 0);
-        assert_eq!(timestamp.nanoseconds, 1);
+        // Windows system timestamps have coarser resolution than one nanosecond, so
+        // use a whole second that every supported platform can represent exactly.
+        let timestamp = timestamp_from_system_time(UNIX_EPOCH - Duration::from_secs(1));
+        assert_eq!(timestamp.unix_seconds, -1);
+        assert_eq!(timestamp.nanoseconds, 0);
         let _ = timestamp_from_system_time(SystemTime::now());
     }
 }

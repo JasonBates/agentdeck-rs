@@ -160,13 +160,19 @@ pub fn windows_cache_dir(
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, ffi::OsString, path::Path};
+    use std::{ffi::OsString, path::Path};
+
+    #[cfg(unix)]
+    use std::collections::BTreeMap;
 
     use super::{
-        unix_cache_dir, unix_config_file, unix_state_dir, unix_transcript_roots, windows_cache_dir,
-        windows_config_file, windows_state_dir, windows_transcript_roots,
+        windows_cache_dir, windows_config_file, windows_state_dir, windows_transcript_roots,
     };
 
+    #[cfg(unix)]
+    use super::{unix_cache_dir, unix_config_file, unix_state_dir, unix_transcript_roots};
+
+    #[cfg(unix)]
     #[test]
     fn unix_honors_absolute_xdg_config_home() {
         let env = BTreeMap::from([("XDG_CONFIG_HOME", OsString::from("/config-root"))]);
@@ -175,6 +181,7 @@ mod tests {
         assert_eq!(path, Path::new("/config-root/agentdeck/config.toml"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn unix_ignores_relative_or_missing_xdg_config_home() {
         for xdg in [None, Some(OsString::from("relative/config"))] {
@@ -199,41 +206,52 @@ mod tests {
         assert_eq!(fallback, Path::new("fallback/agentdeck/config.toml"));
     }
 
+    #[cfg(unix)]
     #[test]
-    fn state_paths_use_xdg_state_and_local_appdata() {
+    fn unix_state_paths_honor_xdg_state() {
         let unix = unix_state_dir(Path::new("/home/fixture"), |key| {
             (key == "XDG_STATE_HOME").then(|| OsString::from("/state-root"))
         });
         let unix_fallback = unix_state_dir(Path::new("/home/fixture"), |_| None);
-        let windows = windows_state_dir(Path::new("fallback"), |key| {
-            (key == "LOCALAPPDATA").then(|| OsString::from("local"))
-        });
 
         assert_eq!(unix, Path::new("/state-root/agentdeck"));
         assert_eq!(
             unix_fallback,
             Path::new("/home/fixture/.local/state/agentdeck")
         );
-        assert_eq!(windows, Path::new("local/agentdeck/state"));
     }
 
     #[test]
-    fn cache_paths_use_xdg_cache_and_local_appdata() {
+    fn windows_state_paths_use_local_appdata() {
+        let windows = windows_state_dir(Path::new("fallback"), |key| {
+            (key == "LOCALAPPDATA").then(|| OsString::from("local"))
+        });
+        assert_eq!(windows, Path::new("local/agentdeck/state"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_cache_paths_honor_xdg_cache() {
         let unix = unix_cache_dir(Path::new("/home/fixture"), |key| {
             (key == "XDG_CACHE_HOME").then(|| OsString::from("/cache-root"))
         });
         let unix_fallback = unix_cache_dir(Path::new("/home/fixture"), |_| None);
-        let windows = windows_cache_dir(Path::new("fallback"), |key| {
-            (key == "LOCALAPPDATA").then(|| OsString::from("local"))
-        });
 
         assert_eq!(unix, Path::new("/cache-root/agentdeck"));
         assert_eq!(unix_fallback, Path::new("/home/fixture/.cache/agentdeck"));
-        assert_eq!(windows, Path::new("local/agentdeck/cache"));
     }
 
     #[test]
-    fn transcript_roots_follow_the_platform_home_or_profile() {
+    fn windows_cache_paths_use_local_appdata() {
+        let windows = windows_cache_dir(Path::new("fallback"), |key| {
+            (key == "LOCALAPPDATA").then(|| OsString::from("local"))
+        });
+        assert_eq!(windows, Path::new("local/agentdeck/cache"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn unix_transcript_roots_follow_home() {
         let unix = unix_transcript_roots(Path::new("/home/fixture"));
         assert_eq!(
             unix.claude_projects_root,
@@ -247,7 +265,10 @@ mod tests {
             unix.copilot_session_state_root,
             Path::new("/home/fixture/.copilot/session-state")
         );
+    }
 
+    #[test]
+    fn windows_transcript_roots_follow_profile() {
         let windows = windows_transcript_roots(Path::new("profile"));
         assert_eq!(
             windows.claude_projects_root,
@@ -263,8 +284,9 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
-    fn transcript_roots_honor_only_absolute_copilot_home() {
+    fn unix_transcript_roots_honor_only_absolute_copilot_home() {
         let overridden = super::transcript_roots(Path::new("/home/fixture"), |key| {
             (key == "COPILOT_HOME").then(|| OsString::from("/copilot-state"))
         });
@@ -278,6 +300,25 @@ mod tests {
         assert_eq!(
             relative.copilot_session_state_root,
             Path::new("/home/fixture/.copilot/session-state")
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_transcript_roots_honor_only_absolute_copilot_home() {
+        let overridden = super::transcript_roots(Path::new(r"C:\Users\fixture"), |key| {
+            (key == "COPILOT_HOME").then(|| OsString::from(r"C:\copilot-state"))
+        });
+        let relative = super::transcript_roots(Path::new(r"C:\Users\fixture"), |key| {
+            (key == "COPILOT_HOME").then(|| OsString::from("relative"))
+        });
+        assert_eq!(
+            overridden.copilot_session_state_root,
+            Path::new(r"C:\copilot-state\session-state")
+        );
+        assert_eq!(
+            relative.copilot_session_state_root,
+            Path::new(r"C:\Users\fixture\.copilot\session-state")
         );
     }
 }

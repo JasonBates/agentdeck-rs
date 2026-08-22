@@ -583,7 +583,12 @@ fn redact_path_with_home(path: &Path, home: Option<&Path>) -> String {
             return if relative.as_os_str().is_empty() {
                 "~".to_owned()
             } else {
-                format!("~{}{}", std::path::MAIN_SEPARATOR, relative.display())
+                let suffix = relative
+                    .components()
+                    .map(|component| component.as_os_str().to_string_lossy().into_owned())
+                    .collect::<Vec<_>>()
+                    .join("/");
+                format!("~/{suffix}")
             };
         }
     }
