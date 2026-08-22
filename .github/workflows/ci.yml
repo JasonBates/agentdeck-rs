@@ -43,10 +43,10 @@ jobs:
           - os: ubuntu-latest
             toolchain: stable
             target: x86_64-unknown-linux-gnu
-          - os: macos-13
+          - os: macos-15-intel
             toolchain: stable
             target: x86_64-apple-darwin
-          - os: macos-14
+          - os: macos-26
             toolchain: stable
             target: aarch64-apple-darwin
           - os: windows-latest

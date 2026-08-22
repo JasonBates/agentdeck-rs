@@ -70,7 +70,7 @@ try {
         $tokens = $null
         $parseErrors = $null
         [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $root "release/$script"), [ref]$tokens, [ref]$parseErrors) | Out-Null
-        if ($parseErrors.Count -gt 0) { throw "PowerShell parse error in $script: $($parseErrors[0].Message)" }
+        if ($parseErrors.Count -gt 0) { throw "PowerShell parse error in ${script}: $($parseErrors[0].Message)" }
     }
     $plan = & (Join-Path $root 'release/service.ps1') install -Binary (Join-Path $installDir 'agentdeck.exe') -Config (Join-Path $scratch 'config & spaces.toml') -TaskName AgentDeckTest -ReceiptPath (Join-Path $scratch 'service-receipt.json') -Plan | ConvertFrom-Json
     if ($plan.task_name -ne 'AgentDeckTest' -or $plan.arguments -notmatch 'config & spaces') { throw 'service plan did not preserve arguments safely' }
