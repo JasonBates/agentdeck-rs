@@ -45,6 +45,7 @@ const PROCESS_LIMITS: ProcessLimits = ProcessLimits {
     stdout_limit: 256 * 1024,
     stderr_limit: 64 * 1024,
 };
+const PROCESS_EXIT_POLL: Duration = Duration::from_millis(1);
 const CACHE_VERSION: u32 = 2;
 const MAX_WINDOW_MINUTES: i64 = 31 * 24 * 60;
 const MAX_RESET_BYTES: usize = 128;
@@ -364,6 +365,10 @@ async fn run_codexbar_process(
     let mut status = None;
     let mut captured_stdout = None;
     let mut captured_stderr = None;
+    // Readers can reach EOF and drop their senders while the child is still
+    // exiting. A closed channel is fatal only when it omitted a capture.
+    let mut receiver_open = true;
+    let mut exit_poll = Instant::now();
     while status.is_none() || captured_stdout.is_none() || captured_stderr.is_none() {
         tokio::select! {
             _ = &mut cancellation => {
@@ -371,7 +376,7 @@ async fn run_codexbar_process(
                 abort_readers(&mut stdout_task, &mut stderr_task).await;
                 return Err(CapacityError::Process);
             }
-            message = receiver.recv() => match message {
+            message = receiver.recv(), if receiver_open => match message {
                 Some(ReaderMessage { stream, result: Ok(bytes) }) => match stream {
                     Stream::Stdout => captured_stdout = Some(bytes),
                     Stream::Stderr => captured_stderr = Some(bytes),
@@ -382,16 +387,22 @@ async fn run_codexbar_process(
                     return Err(error);
                 }
                 None => {
-                    terminate_and_reap(&mut child).await;
-                    abort_readers(&mut stdout_task, &mut stderr_task).await;
-                    return Err(CapacityError::Process);
+                    receiver_open = false;
                 }
             },
+            () = sleep_until(exit_poll), if !receiver_open && status.is_none() => {
+                exit_poll = Instant::now() + PROCESS_EXIT_POLL;
+            }
             () = sleep_until(deadline) => {
                 terminate_and_reap(&mut child).await;
                 abort_readers(&mut stdout_task, &mut stderr_task).await;
                 return Err(CapacityError::Timeout);
             }
+        }
+        if !receiver_open && (captured_stdout.is_none() || captured_stderr.is_none()) {
+            terminate_and_reap(&mut child).await;
+            abort_readers(&mut stdout_task, &mut stderr_task).await;
+            return Err(CapacityError::Process);
         }
         if status.is_none() {
             status = match child.try_wait() {
@@ -1077,6 +1088,38 @@ mod tests {
             parse_codexbar_usage(&output.stdout).map(|providers| providers.len()),
             Ok(1)
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn runner_waits_for_exit_after_both_streams_close() {
+        let directory =
+            tempdir().unwrap_or_else(|error| panic!("temporary script directory: {error}"));
+        let script = executable_script(
+            directory.path(),
+            "close-streams-then-exit",
+            "printf '%s' '[{\"provider\":\"codex\",\"usage\":{\"primary\":{\"usedPercent\":1,\"windowMinutes\":60}}}]'\nexec 1>&-\nexec 2>&-\nsleep 0.05",
+        );
+        let (_cancel, receiver) = oneshot::channel();
+        let output = run_codexbar_process(
+            script,
+            receiver,
+            ProcessLimits {
+                timeout: Duration::from_secs(1),
+                stdout_limit: 1024,
+                stderr_limit: 1024,
+            },
+        )
+        .await
+        .unwrap_or_else(|error| {
+            panic!("runner rejected a child that closed streams first: {error}")
+        });
+        assert!(output.success);
+        assert_eq!(
+            parse_codexbar_usage(&output.stdout).map(|providers| providers.len()),
+            Ok(1)
+        );
+        assert!(output.stderr.is_empty());
     }
 
     #[cfg(unix)]
