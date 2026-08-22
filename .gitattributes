@@ -1,1 +1,2 @@
 Tests/golden/sse/*.txt whitespace=-blank-at-eof
+crates/agentdeck-core/tests/fixtures/headings/*.txt text eol=lf
