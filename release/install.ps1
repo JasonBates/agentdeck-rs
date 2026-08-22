@@ -33,7 +33,7 @@ function Test-OwnedInstall($Receipt, [string]$BinaryPath, [string]$ExpectedInsta
 }
 function Move-Atomic([string]$Source, [string]$Destination) {
     if (Test-Path -LiteralPath $Destination -PathType Leaf) {
-        [System.IO.File]::Replace($Source, $Destination, $null, $true)
+        [System.IO.File]::Replace($Source, $Destination, [System.Management.Automation.Language.NullString]::Value, $true)
     } else {
         [System.IO.File]::Move($Source, $Destination)
     }
