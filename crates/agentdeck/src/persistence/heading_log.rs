@@ -103,16 +103,9 @@ impl HeadingAttemptLog {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     fn enabled(&self) -> bool {
-        #[cfg(unix)]
-        {
-            self.directory.is_some()
-        }
-        #[cfg(not(unix))]
-        {
-            false
-        }
+        self.directory.is_some()
     }
 }
 

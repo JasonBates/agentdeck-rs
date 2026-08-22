@@ -130,6 +130,7 @@ impl FakeHerdr {
         *lock(&self.fallback) = result;
     }
 
+    #[cfg(unix)]
     fn set_snapshot_delay(&self, delay: Duration) {
         *lock(&self.snapshot_delay) = delay;
     }
@@ -150,10 +151,12 @@ impl FakeHerdr {
         *lock(&self.screen_delay) = delay;
     }
 
+    #[cfg(unix)]
     fn push_rename_result(&self, result: std::result::Result<(), RuntimeFailure>) {
         lock(&self.rename_results).push_back(result);
     }
 
+    #[cfg(unix)]
     fn set_rename_delay(&self, delay: Duration) {
         *lock(&self.rename_delay) = delay;
     }
@@ -759,6 +762,7 @@ fn single_tab_snapshot(label: &str) -> SnapshotDto {
     snapshot
 }
 
+#[cfg(unix)]
 fn single_tab_batch(snapshot: &SnapshotDto, model_title: &str) -> TabTitleBatch {
     let normalized = normalize_snapshot(snapshot)
         .unwrap_or_else(|error| panic!("single-tab fixture must normalize: {error}"));
@@ -881,6 +885,7 @@ async fn wait_for_heading_calls(provider: &FakeHeadingProvider, minimum: usize) 
     panic!("heading provider did not reach {minimum} calls");
 }
 
+#[cfg(unix)]
 async fn wait_for_rename_calls(herdr: &FakeHerdr, minimum: usize) {
     for _ in 0..200 {
         if lock(&herdr.rename_calls).len() >= minimum {
