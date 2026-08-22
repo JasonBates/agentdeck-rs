@@ -978,18 +978,18 @@ impl<K: Clone + Eq + Hash, V: Clone> BoundedCache<K, V> {
 #[cfg(test)]
 mod tests {
     use std::{
+        fs,
         path::Path,
         time::{Duration, SystemTime},
     };
 
     #[cfg(unix)]
-    use std::{fs, process::Command, sync::mpsc, thread};
+    use std::{process::Command, sync::mpsc, thread};
 
     use agentdeck_core::{
         HerdrAgentSession,
         transcript::{DIGEST_TAIL_BYTES, TranscriptKind},
     };
-    #[cfg(unix)]
     use tempfile::TempDir;
 
     use super::*;

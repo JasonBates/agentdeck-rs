@@ -79,10 +79,11 @@ and reparse-point validation.
 
 Copilot enrichment is best-effort and read-only: only a validated Herdr Copilot session ID may
 locate `session-state/<id>/events.jsonl` below the local Copilot home (or an absolute
-`COPILOT_HOME`). It derives reply age and context when safe records are available; it never reads
-`session-store.db`, invokes the Copilot CLI, or contacts a cloud service. Copilot transcript
-content is not used for generated headings. See GitHub's [Copilot CLI configuration-directory
-reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference).
+`COPILOT_HOME`). Bounded, non-ephemeral root prompts and final replies can feed headings, reply
+age, and context; subagent, tool, reasoning, and ephemeral events are excluded. AgentDeck never
+reads `session-store.db`, invokes the Copilot CLI, or contacts a cloud service. A missing,
+malformed, or changed event format falls back to a generic Herdr card. See GitHub's
+[Copilot CLI configuration-directory reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-config-dir-reference).
 
 Transcript enrichment is enabled by default to preserve AgentDeck's existing context, unread,
 reply-age, and generated-heading behavior for supported agents. Set `transcripts.enabled = false`

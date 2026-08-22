@@ -1800,7 +1800,7 @@ fn every_heading_discovery_outcome_maps_to_closed_payload_and_health_codes() {
 }
 
 #[test]
-fn copilot_and_unknown_never_enter_transcript_heading_inputs() {
+fn validated_copilot_enters_heading_inputs_while_unknown_stays_excluded() {
     let normalized = normalize_snapshot(&snapshot_with_agents(
         "agents",
         vec![
@@ -1823,11 +1823,12 @@ fn copilot_and_unknown_never_enter_transcript_heading_inputs() {
     let (runtime, mut receiver, _shared) = RuntimeHeadings::new(&config);
     runtime.submit(&normalized, &observations, &HashMap::new());
     let latest = receiver.borrow_and_update().clone();
-    assert!(latest.panes.values().all(|pane| pane.digest.is_none()));
+    assert!(latest.panes["w1:p1"].digest.is_some());
+    assert!(latest.panes["w1:p2"].digest.is_none());
 }
 
 #[tokio::test]
-async fn configured_heading_worker_never_receives_a_copilot_digest() {
+async fn configured_heading_worker_generates_from_a_validated_copilot_digest() {
     let provider = FakeHeadingProvider::new();
     let discovery = Arc::new(FakeHeadingDiscovery::new(
         HeadingCapability::Available { backend: "ollama" },
@@ -1859,9 +1860,11 @@ async fn configured_heading_worker_never_receives_a_copilot_digest() {
     worker
         .runtime
         .submit(&normalized, &observations, &HashMap::new());
-    tokio::time::sleep(Duration::from_millis(20)).await;
+    wait_for_heading_calls(&provider, 3).await;
 
-    assert!(lock(&provider.calls).is_empty());
+    assert_eq!(provider.count(HeadingKind::Title), 1);
+    assert_eq!(provider.count(HeadingKind::Subtitle), 1);
+    assert_eq!(provider.count(HeadingKind::Outcome), 1);
     worker.stop().await;
 }
 

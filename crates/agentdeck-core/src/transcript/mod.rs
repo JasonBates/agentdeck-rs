@@ -46,11 +46,13 @@ impl TranscriptKind {
         matches!(self, Self::Claude | Self::Pi | Self::Codex | Self::Copilot)
     }
 
-    /// Whether transcript data may be supplied to generated-heading policy.
-    /// Copilot intentionally remains excluded pending a separate evaluation.
+    /// Whether a bounded, normalized transcript may be supplied to generated-heading
+    /// policy. Copilot is best-effort because its local event format is not a stable
+    /// AgentDeck-owned contract, but only validated root user/final-assistant events
+    /// reach this boundary.
     #[must_use]
     pub const fn supports_generated_headings(self) -> bool {
-        matches!(self, Self::Claude | Self::Pi | Self::Codex)
+        matches!(self, Self::Claude | Self::Pi | Self::Codex | Self::Copilot)
     }
 
     /// Historical heading-policy predicate. Use [`Self::supports_enrichment`]

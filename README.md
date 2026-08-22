@@ -45,7 +45,7 @@ terminal or the coding agent; it helps decide where attention should go next.
 
 | Mode | What is required | What you get |
 |---|---|---|
-| **Recommended** | Herdr + Ollama running on loopback + a configured installed model | Model-enriched cards for supported Claude Code, Codex, and Pi sessions: contextual titles, current-step subtitles, outcomes, and safe local context enrichment. |
+| **Recommended** | Herdr + Ollama running on loopback + a configured installed model | Model-enriched cards for Claude Code, Codex, Pi, and best-effort Copilot sessions: contextual titles, current-step subtitles, outcomes, and safe local context enrichment. |
 | **Fallback** | Herdr only | Reliable agent/workspace/status/focus cards with deterministic labels; model-derived prose and the model panel stay absent. |
 
 CodexBar and machine telemetry are separate enhancements. Missing integrations never
@@ -153,8 +153,9 @@ AgentDeck is local-first:
 - The listener is loopback-only by default.
 - There is no analytics, crash upload, hosted service, or cloud-model fallback.
 - Claude Code, Codex, and Pi enrichment reads bounded local transcript windows.
-- Copilot remains a generic Herdr card unless its validated local event data can safely
-  provide reply age/context; generated Copilot headings are currently unavailable.
+- Copilot enrichment is best-effort: for a validated Herdr-reported session ID, bounded
+  root prompts and final replies from its local event log can provide headings, reply
+  age, and context. Invalid or changed formats fall back to a generic Herdr card.
 - Set `transcripts.enabled = false` to prevent all transcript-file reads.
 - Remote listeners require a bearer token and exact allowed origins.
 

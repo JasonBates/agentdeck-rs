@@ -178,8 +178,8 @@ fn copilot_keeps_only_root_prompts_final_replies_and_safe_context() {
         ContextOutcome::Ready(context) if context.used == 120 && context.limit == 200 && context.model.as_deref() == Some("fixture-model")
     ));
     assert!(TranscriptKind::Copilot.supports_enrichment());
-    assert!(!TranscriptKind::Copilot.supports_generated_headings());
-    assert!(!TranscriptKind::Copilot.is_supported());
+    assert!(TranscriptKind::Copilot.supports_generated_headings());
+    assert!(TranscriptKind::Copilot.is_supported());
 }
 
 #[test]

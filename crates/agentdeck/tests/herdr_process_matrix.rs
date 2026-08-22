@@ -39,12 +39,14 @@ impl ProcessRunner for ScenarioRunner {
     }
 }
 
+#[cfg(unix)]
 struct SequencedRunner {
     calls: AtomicUsize,
     hanging_calls: usize,
     records: Vec<PathBuf>,
 }
 
+#[cfg(unix)]
 impl ProcessRunner for SequencedRunner {
     fn run(&self, mut spec: CommandSpec, permit: OwnedSemaphorePermit) -> RunnerFuture<'_> {
         let call = self.calls.fetch_add(1, Ordering::SeqCst);
@@ -103,7 +105,10 @@ async fn timeouts_before_and_after_partial_output_terminate_and_reap() {
                 .await
                 .error_or_panic()
         });
+        #[cfg(unix)]
         let started = read_record(&record).await;
+        #[cfg(not(unix))]
+        let _ = read_record(&record).await;
         #[cfg(unix)]
         assert!(
             pid_alive(record_pid(&started)),
@@ -707,15 +712,18 @@ async fn read_record(record: &Path) -> Value {
 }
 
 async fn assert_recorded_process_reaped(record: &Path) {
-    let value = read_record(record).await;
     #[cfg(unix)]
     {
+        let value = read_record(record).await;
         let pid = record_pid(&value);
         assert!(!pid_alive(pid), "fake process {pid} was not reaped");
     }
+    #[cfg(not(unix))]
+    let _ = read_record(record).await;
     remove_file(record);
 }
 
+#[cfg(unix)]
 fn record_pid(value: &Value) -> u64 {
     value["pid"]
         .as_u64()
