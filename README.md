@@ -13,6 +13,10 @@ short, stable titles, current-step subtitles, and useful outcome summaries.
 The dashboard runs without a model, but local-model enrichment is the recommended
 experience and the feature that makes a busy deck genuinely scannable.
 
+This is the portable Rust implementation. The macOS-native original, built around
+launchd, Tailscale Serve, Herdr's sidebar and CodexBar, is
+[JasonBates/agentdeck](https://github.com/JasonBates/agentdeck).
+
 ## Why it exists
 
 Terminal multiplexers are good at holding sessions. They are less good at answering the
