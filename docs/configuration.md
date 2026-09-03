@@ -31,6 +31,7 @@ selects, or starts a model or provider.
 listen = "127.0.0.1:9798"
 base_path = "/"
 reconcile_interval = "1s"
+# public_host = "studio.tail1234.ts.net" # hostname a TLS proxy presents this bridge as
 
 [herdr]
 # session = "default" # alternatively: socket = "..."; never both
@@ -95,6 +96,14 @@ variables, then TOML, then defaults. The implemented flags are `--port`, `--inte
 environment variables are `AGENTDECK_PORT`, `AGENTDECK_INTERVAL`, `AGENTDECK_MODEL`,
 `AGENTDECK_TITLE_MODEL`, `AGENTDECK_NAMES`, `AGENTDECK_TAB_TITLES`, `AGENTDECK_PUBLIC`,
 and `AGENTDECK_PUBLIC_HOST`.
+
+The bridge answers `/api/*` and `/events` only for addresses it has been configured
+with: its loopback address, `server.public_host`, and each `security.allowed_origins`
+entry. Any other `Host` is refused with `403 origin_rejected`, which defeats DNS rebinding
+but also means a bridge behind a proxy needs one of those two settings. `public_host` is
+a bare lowercase hostname with no scheme or port and covers the standard HTTPS port; an
+address with a port goes in `allowed_origins` instead. See
+[Remote access with Tailscale](remote-access.md).
 
 A non-loopback `server.listen` requires `security.auth_token`; its length must be at
 least 32 bytes. Every `security.allowed_origins` entry must be an exact canonical HTTP(S)

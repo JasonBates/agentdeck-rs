@@ -770,6 +770,10 @@
   .auth-actions button { min-height: 40px; padding: 0 14px; border: 1px solid var(--line);
     border-radius: 6px; background: var(--card); color: var(--text); font-weight: 700; }
   .auth-status { min-height: 1.4em; margin-top: 10px; color: var(--muted); font-size: 12px; }
+  .auth-card pre { margin: 0 0 16px; padding: 12px; overflow-x: auto; border: 1px solid var(--line);
+    border-radius: 6px; background: var(--bg); color: var(--text); font: 13px var(--mono);
+    user-select: all; -webkit-user-select: all; }
+  .auth-card .origin-note { font-size: 12px; }
 </style>
 </head>
 <body>
@@ -814,6 +818,21 @@
     <div class="auth-status" id="authStatus" role="status" aria-live="polite"></div>
   </form>
 </section>
+<section class="auth-panel" id="originPanel" hidden role="alertdialog"
+         aria-labelledby="originTitle" aria-describedby="originHelp">
+  <div class="auth-card">
+    <h2 id="originTitle">This address is not configured on the bridge</h2>
+    <p id="originHelp"></p>
+    <pre id="originConfig"></pre>
+    <p class="origin-note">Add it to the bridge's <code>config.toml</code>, restart
+      <code>agentdeck</code>, then reload this page. See
+      <a href="https://github.com/JasonBates/agentdeck-rs/blob/main/docs/remote-access.md">Remote
+      access</a> for the full walkthrough.</p>
+    <div class="auth-actions">
+      <button type="button" id="originReload">Reload</button>
+    </div>
+  </div>
+</section>
 
 <script>
 (function () {
@@ -844,6 +863,10 @@
   var authTokenInput = document.getElementById('authTokenInput');
   var clearAuthTokenButton = document.getElementById('clearAuthToken');
   var authStatus = document.getElementById('authStatus');
+  var originPanel = document.getElementById('originPanel');
+  var originHelp = document.getElementById('originHelp');
+  var originConfig = document.getElementById('originConfig');
+  var originReload = document.getElementById('originReload');
   var lastMsg = 0;
   var selected = 'all';   // which pill is filtering the grid
   var last = null;        // last payload, so a pill tap can re-render without waiting
@@ -937,6 +960,35 @@
     tick();
   }
 
+  // The bridge answers /api and /events only for addresses it has been configured
+  // with (a loopback origin, server.public_host, or a security.allowed_origins entry).
+  // Behind a proxy such as Tailscale Serve the page itself still loads, so without this
+  // the deck sat at "bridge offline" with the real reason visible only in devtools.
+  // Print the exact configuration lines that make the current address known.
+  function originRejectedConfig() {
+    if (location.protocol === 'https:' && !location.port) {
+      return '[server]\npublic_host = "' + location.hostname + '"';
+    }
+    return '[security]\nallowed_origins = ["' + location.origin + '"]';
+  }
+
+  function isOriginRejected(response) {
+    if (response.status !== 403) return Promise.resolve(false);
+    return response.clone().json().then(function (body) {
+      return !!body && body.error === 'origin_rejected';
+    }).catch(function () { return false; });
+  }
+
+  function showOriginRejected() {
+    clearActiveConnection();
+    hideAuthPrompt();
+    originHelp.textContent = 'You opened AgentDeck as ' + location.origin +
+      ', but the bridge has not been told to answer for that address, so it refuses ' +
+      'every request from this page.';
+    originConfig.textContent = originRejectedConfig();
+    originPanel.hidden = false;
+  }
+
   function scheduleAuthenticatedReconnect() {
     if (!authToken || reconnectTimer) return;
     var delay = reconnectDelay;
@@ -954,6 +1006,12 @@
     activeStreamAbort = controller;
     authorizedFetch('events', { signal: controller.signal }).then(function (response) {
       if (response.status === 401) return null;
+      if (response.status === 403) {
+        return isOriginRejected(response).then(function (rejected) {
+          if (rejected) { showOriginRejected(); return null; }
+          throw new Error('stream unavailable');
+        });
+      }
       if (!response.ok || !response.body || !response.body.getReader) {
         throw new Error('stream unavailable');
       }
@@ -988,10 +1046,18 @@
     activeEventSource = new EventSource(BASE + 'events');
     activeEventSource.onmessage = function (event) { receivePayload(event.data); };
     activeEventSource.onerror = function () { live.classList.add('off'); };
-    // EventSource cannot reveal a 401. A same-origin snapshot probe decides
-    // whether this is a local no-token bridge or should show the auth affordance.
+    // EventSource cannot reveal a 401 or a 403. A same-origin snapshot probe decides
+    // whether this is a local no-token bridge, should show the auth affordance, or is
+    // being reached through an address the bridge was never told about.
     authorizedFetch('api/snapshot').then(function (response) {
-      if (response.status === 401 || !response.ok) return null;
+      if (response.status === 401) return null;
+      if (response.status === 403) {
+        return isOriginRejected(response).then(function (rejected) {
+          if (rejected) showOriginRejected();
+          return null;
+        });
+      }
+      if (!response.ok) return null;
       return response.text();
     }).then(function (data) {
       if (data) receivePayload(data);
@@ -1014,6 +1080,8 @@
     clearAuthToken(false);
     showAuthPrompt('Token cleared. Enter a replacement to reconnect.');
   });
+
+  originReload.addEventListener('click', function () { location.reload(); });
 
   // Arrangement lives on the device, not the server: it's a property of this view.
   // A card holds a slot — a numbered cell in the grid — rather than a place in a queue,

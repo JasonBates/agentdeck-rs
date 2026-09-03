@@ -121,6 +121,28 @@ Open `http://127.0.0.1:9798`. The listener is loopback-only by default. The dash
 reports whether the configured model is available and shows a short setup message when it
 is not. Skip the model edit only when you deliberately want the Herdr-only fallback.
 
+### Reach it from another device
+
+To read the deck on a tablet, a phone, or another computer, keep the loopback listener and
+put a TLS proxy in front of it. Tailscale Serve is the easiest one and works the same on
+macOS, Linux, and Windows. Two steps: tell AgentDeck the address it will be reached at,
+then publish it.
+
+```toml
+[server]
+public_host = "studio.tail1234.ts.net"   # your machine's tailnet name
+```
+
+```bash
+tailscale serve --bg --set-path=/deck http://127.0.0.1:9798
+```
+
+Then open `https://studio.tail1234.ts.net/deck/` from any device in your tailnet. The
+first step matters: the bridge answers only for addresses it has been told about, and
+without it the page loads but every request is refused. The page says so and prints the
+lines to add. [Remote access with Tailscale](docs/remote-access.md) covers the dedicated
+port form, restarting the service, verification, and a token-based alternative.
+
 ### Run it as a background service
 
 To keep AgentDeck running without a foreground terminal, use the lifecycle scripts from
@@ -169,7 +191,9 @@ AgentDeck is local-first:
   root prompts and final replies from its local event log can provide headings, reply
   age, and context. Invalid or changed formats fall back to a generic Herdr card.
 - Set `transcripts.enabled = false` to prevent all transcript-file reads.
-- Remote listeners require a bearer token and exact allowed origins.
+- Remote listeners require a bearer token and exact allowed origins. The supported
+  remote path keeps the loopback listener behind a TLS proxy; see
+  [Remote access with Tailscale](docs/remote-access.md).
 
 See [Privacy](docs/privacy.md) for the full data-flow contract.
 
@@ -200,6 +224,7 @@ This repository contains the complete portable implementation and synthetic test
 
 - [Installation, services, upgrade, and rollback](docs/install.md)
 - [Configuration and model setup](docs/configuration.md)
+- [Remote access with Tailscale](docs/remote-access.md)
 - [Privacy and local data](docs/privacy.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Cross-platform support matrix](docs/platform-support.md)
