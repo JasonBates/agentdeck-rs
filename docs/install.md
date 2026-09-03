@@ -7,35 +7,62 @@ Install Herdr using its [official platform instructions](https://herdr.dev/docs/
 then run `herdr` once to launch or attach the session AgentDeck will display. Native Windows
 Herdr is currently a preview beta; AgentDeck's Windows support carries the same limitation.
 
-## Build and run from source
+## Install from source (current method)
 
-AgentDeck is currently pre-release. Until the first tagged GitHub release is published,
-build and run the current source with Rust 1.85 or newer:
+No packaged release exists yet, so building from source is the supported installation
+today. Install Rust 1.85 or newer through [rustup](https://rustup.rs/), then:
 
 ```bash
 git clone https://github.com/JasonBates/agentdeck-rs.git
 cd agentdeck-rs
-cargo build --release --locked
-./target/release/agentdeck config init
-./target/release/agentdeck doctor
-./target/release/agentdeck serve
+cargo install --path crates/agentdeck --locked
 ```
 
-Open `http://127.0.0.1:9798`. This source workflow runs the executable from the checkout;
-it does not create an installation receipt or install lifecycle scripts.
+`cargo install` builds the release profile and places the `agentdeck` binary in
+`~/.cargo/bin` on macOS/Linux or `%USERPROFILE%\.cargo\bin` on Windows. rustup adds that
+directory to `PATH`; open a new shell if `agentdeck` is not found. Only the `agentdeck`
+binary is installed. The test-helper binary in the same crate is behind a feature flag and
+is never built by this command.
 
-## Checksum-verified prebuilt install after the first release
+Keep the checkout. The service scripts below run from its `release/` directory, and later
+updates reuse it.
 
-Download the platform installer, review it if desired, then run it. It downloads the
-matching archive and `SHA256SUMS`, refuses a mismatched checksum, atomically replaces
-the receipt-owned binary, and writes a private ownership receipt.
+```bash
+agentdeck config init
+agentdeck doctor
+agentdeck serve
+```
+
+Open `http://127.0.0.1:9798`.
+
+A source install has no installation receipt, so the release `uninstall.sh` and
+`uninstall.ps1` scripts do not apply to it. Manage it with Cargo and Git instead:
+
+| Task | Command |
+|---|---|
+| Upgrade | `git pull` then `cargo install --path crates/agentdeck --locked --force` |
+| Roll back | `git checkout <commit>` then the same `cargo install ... --force` |
+| Remove | stop the service (below), then `cargo uninstall agentdeck` |
+
+`--force` is required because the crate version does not change between commits.
+Configuration, state, caches, and logs are never removed by these commands.
+
+## Prebuilt releases (not yet published)
+
+**There is no GitHub release yet.** Everything in this section describes the intended
+flow for the first tagged release and fails today, because the installers look up
+release assets that do not exist. Use the source install above until a tag is published.
+
+Once a release exists: download the platform installer, review it if desired, then run it.
+It downloads the matching archive and `SHA256SUMS`, refuses a mismatched checksum,
+atomically replaces the receipt-owned binary, and writes a private ownership receipt.
 
 The checksum detects an archive that does not match the published manifest. Release
 artifacts and `SHA256SUMS` are not yet signed, and macOS artifacts are not notarized, so
 checksum verification is not publisher authentication. Pin a release tag, inspect the
 installer, and see the [security policy](../SECURITY.md) before using an unsigned release.
 
-macOS/Linux:
+macOS/Linux (`v0.1.0` stands for the first tag once it exists):
 
 ```bash
 version=v0.1.0
@@ -65,7 +92,7 @@ when the recorded receipt and installed file hashes match; inspect any collision
 `--force` (Unix) or `-Force` (PowerShell) only if you intentionally want to take ownership
 of the replacement.
 
-## Pinned rollback or upgrade
+## Pinned rollback or upgrade (releases)
 
 Without a version, the installer uses the latest GitHub release. Select a specific release
 tag for a repeatable upgrade or rollback:
@@ -95,6 +122,9 @@ TLS-protected remote configuration supplies a valid bearer token and exact allow
 `agentdeck doctor --json` provides a redacted, machine-readable local diagnostic report.
 
 ## Retain the service and uninstall tools
+
+Source installs skip this section: the same scripts are already in the checkout's
+`release/` directory, so run them from there.
 
 The binary installer deliberately installs only `agentdeck` / `agentdeck.exe`; its
 temporary archive extraction is deleted when installation finishes. Service and uninstall
@@ -137,10 +167,11 @@ definitions without text substitution. They validate their generated output, cre
 applicable macOS or Windows log directory when needed, and write a service ownership
 receipt. They refuse to replace or delete a foreign or modified service/task.
 
-macOS and Linux:
+macOS and Linux (release install, then source install):
 
 ```bash
 ./service.sh install --binary "$HOME/.local/bin/agentdeck" --config "$HOME/.config/agentdeck/config.toml"
+release/service.sh install --binary "$HOME/.cargo/bin/agentdeck"
 ./service.sh uninstall
 ```
 
@@ -148,10 +179,11 @@ On macOS this manages a LaunchAgent and writes logs to `~/Library/Logs/AgentDeck
 On Linux it manages a `systemd --user` service; use `journalctl --user -u agentdeck` for
 logs. If `systemd --user` is unavailable, keep AgentDeck in the foreground instead.
 
-Windows PowerShell:
+Windows PowerShell (release install, then source install):
 
 ```powershell
 .\service.ps1 install -Binary "$env:LOCALAPPDATA\AgentDeck\bin\agentdeck.exe" -Config "$env:APPDATA\agentdeck\config.toml"
+.\release\service.ps1 install -Binary "$env:USERPROFILE\.cargo\bin\agentdeck.exe"
 .\service.ps1 uninstall
 ```
 
@@ -166,7 +198,10 @@ quotes, XML characters, `$`, or `%` are handled safely.
 
 ## Uninstall
 
-Stop and remove the service first, then invoke the matching uninstaller from the retained
+For a source install, stop and remove the service, then run `cargo uninstall agentdeck`;
+the scripts below need an installer receipt that a source install does not have.
+
+For a release install, stop and remove the service first, then invoke the matching uninstaller from the retained
 or freshly verified release-tools directory described above:
 
 ```bash

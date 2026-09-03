@@ -72,20 +72,28 @@ Model quality matters here more than general benchmark rank: concise instruction
 following, correct use of a preceding reply, and resisting title repetition are the
 important behaviours. Contributions with reproducible synthetic results are welcome.
 
-## Quick start from source
+## Install from source
 
-The project is currently pre-release. Until the first tagged GitHub release is
-published, build with Rust 1.85 or newer:
+There is no packaged release yet, so building from source is the supported way to
+install AgentDeck today. You need Rust 1.85 or newer and a running
+[Herdr](https://herdr.dev/docs/install/).
 
 ```bash
 git clone https://github.com/JasonBates/agentdeck-rs.git
 cd agentdeck-rs
-cargo build --release --locked
-./target/release/agentdeck config init
+cargo install --path crates/agentdeck --locked
 ```
 
-Install and start [Herdr](https://herdr.dev/docs/install/) before launching AgentDeck.
-The default listener is `http://127.0.0.1:9798`.
+That builds a release binary and places `agentdeck` in `~/.cargo/bin`
+(`%USERPROFILE%\.cargo\bin` on Windows), which rustup normally adds to `PATH`. Keep the
+checkout: it holds the service scripts used below, and upgrading is `git pull` followed
+by the same `cargo install` command with `--force`.
+
+Next create a configuration file:
+
+```bash
+agentdeck config init
+```
 
 `config init` creates a private file at `~/.config/agentdeck/config.toml` on
 macOS/Linux or `%APPDATA%\agentdeck\config.toml` on Windows. It leaves the model tag
@@ -102,49 +110,53 @@ outcome_model = "inherit"
 activity_model = "inherit"
 ```
 
-With that edit saved, start the recommended model-enriched mode:
+With that edit saved, check the setup and start the recommended model-enriched mode:
 
 ```bash
-./target/release/agentdeck doctor
-./target/release/agentdeck serve
-```
-
-Open `http://127.0.0.1:9798`. The dashboard reports whether the configured model is
-available and shows a short setup message when it is not. Skip the model edit only when
-you deliberately want the Herdr-only fallback.
-
-## Release installation
-
-Once a tagged release exists, the checked-in installers download a platform archive,
-verify its integrity against `SHA256SUMS`, install atomically, and record an ownership
-receipt. They refuse to replace unrelated binaries unless `--force` is explicit. The
-first artifacts will be unsigned; read the [security policy](SECURITY.md) before using
-them and do not treat a checksum published beside an archive as publisher authentication.
-
-macOS/Linux:
-
-```bash
-curl -fLO https://raw.githubusercontent.com/JasonBates/agentdeck-rs/main/release/install.sh
-bash install.sh
-agentdeck config init
 agentdeck doctor
 agentdeck serve
 ```
 
-Windows PowerShell:
+Open `http://127.0.0.1:9798`. The listener is loopback-only by default. The dashboard
+reports whether the configured model is available and shows a short setup message when it
+is not. Skip the model edit only when you deliberately want the Herdr-only fallback.
+
+### Run it as a background service
+
+To keep AgentDeck running without a foreground terminal, use the lifecycle scripts from
+the checkout. They point a per-user service at the binary you installed above and refuse
+to touch any service they did not create.
+
+macOS (LaunchAgent) or Linux (`systemd --user`):
+
+```bash
+release/service.sh install --binary "$HOME/.cargo/bin/agentdeck"
+release/service.sh uninstall
+```
+
+Windows (current-user scheduled task):
 
 ```powershell
-Invoke-WebRequest -Uri https://raw.githubusercontent.com/JasonBates/agentdeck-rs/main/release/install.ps1 -OutFile .\install.ps1
-.\install.ps1
-& "$env:LOCALAPPDATA\AgentDeck\bin\agentdeck.exe" config init
-& "$env:LOCALAPPDATA\AgentDeck\bin\agentdeck.exe" doctor
-& "$env:LOCALAPPDATA\AgentDeck\bin\agentdeck.exe" serve
+.\release\service.ps1 install -Binary "$env:USERPROFILE\.cargo\bin\agentdeck.exe"
+.\release\service.ps1 uninstall
 ```
+
+To remove a source install, uninstall the service first, then run
+`cargo uninstall agentdeck`. Configuration, state, and logs are left in place.
 
 Windows support follows Herdr's native Windows beta. AgentDeck builds and tests on
 Windows, including named-pipe protocol fixtures, PowerShell installation, Task
 Scheduler lifecycle, and archive layout. A live Windows Herdr/Copilot smoke test is
 still required before the first stable release.
+
+## Prebuilt releases
+
+No GitHub release has been published yet. The installers under [`release/`](release/)
+download a tagged archive, verify it against `SHA256SUMS`, and record an ownership
+receipt, so they fail until a tag exists. Do not run them yet; install from source
+instead. What they will do, and how upgrade, rollback, and uninstall will work once
+releases exist, is described in
+[docs/install.md](docs/install.md#prebuilt-releases-not-yet-published).
 
 ## Privacy and boundaries
 
