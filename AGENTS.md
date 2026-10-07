@@ -12,7 +12,7 @@ machine, accounts, or local agent history.
 - Run the focused test nearest to a change first. Browser changes use
   `node --test Tests/UI/*.mjs`; Unix installer/service changes use the matching
   scripts under `release/tests/`.
-- Use `apply_patch` for source edits. Preserve unrelated dirty work and do not
+- Make source edits as targeted patches. Preserve unrelated dirty work and do not
   reset, overwrite, or remove it.
 
 ## Local integrations and privacy
